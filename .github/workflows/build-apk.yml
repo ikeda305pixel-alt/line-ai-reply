@@ -45,10 +45,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0
-          name: LINE & Bumble AI Reply Assistant v1.1.0
+          tag_name: v1.1.1
+          name: LINE & Bumble AI Reply Assistant v1.1.1
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.1.0 (文脈深掘り＆Gemini 1.5 Flash搭載)
+            ## LINE & Bumble AI返信アシスタント v1.1.1 (相手への的確な直接回答・質問応答特化版)
 
             ### 主なアップデート
             - **Gemini 1.5 Flash 正式連携**: APIキー保存時にリアルタイム反映。アプリ内の「🔑 APIキーの通信テスト」で疎通確認可能。
