@@ -14,19 +14,32 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.antigravity.lineaireply.ai.ConversationMemoryManager
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.SmartChatAssistant
 import com.antigravity.lineaireply.service.LineAccessibilityService
 import com.antigravity.lineaireply.service.SmartOverlayManager
 import kotlinx.coroutines.launch
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
     private lateinit var guard: FreeTierGuard
+    private lateinit var memoryManager: ConversationMemoryManager
+
+    private val openTxtLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            handleImportTxtUri(uri)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,17 +47,21 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("line_ai_prefs", Context.MODE_PRIVATE)
         guard = FreeTierGuard(this)
+        memoryManager = ConversationMemoryManager(this)
 
         val editKey = findViewById<EditText>(R.id.editGeminiApiKey)
         val textStatus = findViewById<TextView>(R.id.textFreeTierStatus)
+        val textUserStyleStatus = findViewById<TextView>(R.id.textUserStyleStatus)
         val btnSave = findViewById<Button>(R.id.btnSave)
         val btnAccessibility = findViewById<Button>(R.id.btnOpenAccessibility)
         val btnOverlay = findViewById<Button>(R.id.btnOpenOverlay)
         val btnTestBubble = findViewById<Button>(R.id.btnTestBubble)
         val btnTestApiKey = findViewById<Button>(R.id.btnTestApiKey)
+        val btnImportLineTxt = findViewById<Button>(R.id.btnImportLineTxt)
+        val btnPasteChatLog = findViewById<Button>(R.id.btnPasteChatLog)
 
         editKey.setText(prefs.getString("gemini_key", ""))
-        updateStatus(textStatus)
+        updateStatus(textStatus, textUserStyleStatus)
 
         btnAccessibility.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -113,19 +130,88 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnImportLineTxt.setOnClickListener {
+            openTxtLauncher.launch("*/*")
+        }
+
+        btnPasteChatLog.setOnClickListener {
+            showPasteDialog(textUserStyleStatus)
+        }
+
         btnSave.setOnClickListener {
             val key = editKey.text.toString().trim()
             prefs.edit()
                 .putString("gemini_key", key)
                 .apply()
             Toast.makeText(this, "設定を保存しました！直ちに反映されます", Toast.LENGTH_SHORT).show()
-            updateStatus(textStatus)
+            updateStatus(textStatus, textUserStyleStatus)
         }
     }
 
-    private fun updateStatus(tv: TextView) {
+    private fun handleImportTxtUri(uri: Uri) {
+        val key = prefs.getString("gemini_key", "") ?: ""
+        lifecycleScope.launch {
+            Toast.makeText(this@MainActivity, "トーク履歴を解析・学習中...", Toast.LENGTH_SHORT).show()
+            try {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    val reader = BufferedReader(InputStreamReader(stream))
+                    val text = reader.readText()
+                    val (success, message) = memoryManager.importAndLearnLog(text, key)
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(if (success) "🧠 過去ログ学習完了！" else "⚠️ 学習失敗")
+                        .setMessage(message)
+                        .setPositiveButton("OK") { _, _ ->
+                            updateStatus(findViewById(R.id.textFreeTierStatus), findViewById(R.id.textUserStyleStatus))
+                        }
+                        .show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "ファイル読み込み失敗: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showPasteDialog(statusTv: TextView?) {
+        val input = EditText(this).apply {
+            hint = "LINEトーク履歴のテキスト、または自分の典型的な返信メッセージを複数行貼り付けてください"
+            minLines = 6
+            setPadding(32, 32, 32, 32)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("📋 過去ログ・口調テキストを貼り付け")
+            .setView(input)
+            .setPositiveButton("学習開始") { _, _ ->
+                val pasted = input.text.toString().trim()
+                if (pasted.isBlank()) {
+                    Toast.makeText(this, "テキストが入力されていません", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val key = prefs.getString("gemini_key", "") ?: ""
+                lifecycleScope.launch {
+                    Toast.makeText(this@MainActivity, "AIが口調と相手の性格を学習中...", Toast.LENGTH_SHORT).show()
+                    val (success, message) = memoryManager.importAndLearnLog(pasted, key)
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(if (success) "🧠 学習完了！" else "⚠️ 学習失敗")
+                        .setMessage(message)
+                        .setPositiveButton("OK") { _, _ ->
+                            updateStatus(findViewById(R.id.textFreeTierStatus), statusTv)
+                        }
+                        .show()
+                }
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    private fun updateStatus(tvFreeTier: TextView, tvUserStyle: TextView?) {
         val count = guard.getDailyUsage()
-        tv.text = getString(R.string.status_free_tier, count)
+        tvFreeTier.text = getString(R.string.status_free_tier, count)
+
+        tvUserStyle?.let {
+            val style = memoryManager.getUserStyle()
+            it.text = "俺スタイル（学習数 ${style.totalLearnedCount} 件）:\n${style.summary}"
+        }
 
         val btnAccessibility = findViewById<Button>(R.id.btnOpenAccessibility)
         val btnOverlay = findViewById<Button>(R.id.btnOpenOverlay)
@@ -161,6 +247,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        findViewById<TextView>(R.id.textFreeTierStatus)?.let { updateStatus(it) }
+        findViewById<TextView>(R.id.textFreeTierStatus)?.let {
+            updateStatus(it, findViewById(R.id.textUserStyleStatus))
+        }
     }
 }

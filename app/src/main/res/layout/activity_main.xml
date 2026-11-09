@@ -147,6 +147,68 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Past Chat Log Learning & My Style Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🧠 過去ログ学習 ＆ 俺スタイル設定"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="LINEやBumbleの過去ログを一括学習。自分の口調・言い回し（俺テイスト）を抽出し、プロフェッショナルなコミュ力と融合させます。"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/textUserStyleStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="#10000000"
+                    android:padding="8dp"
+                    android:text="俺スタイル: 読み込み中..."
+                    android:textColor="@color/text_primary"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnImportLineTxt"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="📂 LINEトーク履歴（.txt）を選択して学習" />
+
+                <Button
+                    android:id="@+id/btnPasteChatLog"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="📋 過去ログテキストを貼り付けて学習" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Instructions Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"

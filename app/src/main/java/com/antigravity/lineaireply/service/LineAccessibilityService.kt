@@ -7,6 +7,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
 import com.antigravity.lineaireply.ai.ChatContext
+import com.antigravity.lineaireply.ai.ConversationMemoryManager
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.MessageTurn
 import com.antigravity.lineaireply.ai.SmartChatAssistant
@@ -20,6 +21,7 @@ class LineAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var prefs: SharedPreferences
     private lateinit var guard: FreeTierGuard
+    private lateinit var memoryManager: ConversationMemoryManager
     private lateinit var assistant: SmartChatAssistant
     private lateinit var overlayManager: SmartOverlayManager
 
@@ -32,10 +34,11 @@ class LineAccessibilityService : AccessibilityService() {
         super.onCreate()
         prefs = getSharedPreferences("line_ai_prefs", Context.MODE_PRIVATE)
         guard = FreeTierGuard(this)
+        memoryManager = ConversationMemoryManager(this)
         overlayManager = SmartOverlayManager(this)
 
         val key = prefs.getString("gemini_key", "") ?: ""
-        assistant = SmartChatAssistant(key, guard)
+        assistant = SmartChatAssistant(key, guard, memoryManager)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -131,6 +134,11 @@ class LineAccessibilityService : AccessibilityService() {
         val key = prefs.getString("gemini_key", "") ?: ""
         assistant.updateApiKey(key)
 
+        // Harvest on-screen messages into long-term memory
+        memoryManager.recordScreenTurns(chatContext.partnerName, chatContext.conversationHistory)
+
+        val partnerDossier = memoryManager.getPartnerDossier(chatContext.partnerName)
+
         serviceScope.launch {
             val result = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
 
@@ -146,14 +154,23 @@ class LineAccessibilityService : AccessibilityService() {
                 }
             } else {
                 val langTag = if (chatContext.isEnglishPartner) " 🌐${chatContext.languageDesc}" else ""
-                "LINE: [相手]${chatContext.partnerMessageCount}件 / [自分]${chatContext.userMessageCount}件$langTag [${result.engine}]"
+                val personaTag = if (partnerDossier.personalityType.isNotBlank() && partnerDossier.personalityType != "感情表現豊か・リアクション重視") " [${partnerDossier.personalityType}]" else ""
+                "LINE: 俺流×プロ$personaTag$langTag [${result.engine}]"
+            }
+
+            val profilePreview = if (chatContext.profileSnippet.isNotBlank()) {
+                chatContext.profileSnippet
+            } else if (partnerDossier.location != "都内・行動圏探索中") {
+                "生息: ${partnerDossier.location} / 性格: ${partnerDossier.personalityType}"
+            } else {
+                ""
             }
 
             overlayManager.showReplies(
                 platform = chatContext.platform,
                 summaryText = summary,
                 partnerMessage = chatContext.latestPartnerMessage,
-                profilePreview = chatContext.profileSnippet,
+                profilePreview = profilePreview,
                 options = result.options,
                 showQuickInviteButton = isBumble && !willInvite,
                 onSelect = { selectedText ->
