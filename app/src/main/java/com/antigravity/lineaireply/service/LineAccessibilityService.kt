@@ -58,6 +58,11 @@ class LineAccessibilityService : AccessibilityService() {
                 else -> "LINE"
             }
 
+            // In Bumble, continuously cache profile prompts if visible
+            if (pkg == PKG_BUMBLE) {
+                ChatConversationExtractor.cacheProfileIfVisible(rootInActiveWindow)
+            }
+
             // Always show floating bubble when user is in LINE / Bumble
             overlayManager.showBubble(platform) {
                 handleBubbleClicked(platform, pkg)
@@ -96,6 +101,7 @@ class LineAccessibilityService : AccessibilityService() {
         } else {
             val fallbackContext = ChatContext(
                 platform = platform,
+                partnerName = "",
                 conversationHistory = listOf(
                     MessageTurn("相手", "こんにちは！", true, 0)
                 ),
@@ -103,6 +109,7 @@ class LineAccessibilityService : AccessibilityService() {
                 latestMyMessage = "",
                 profileSnippet = "",
                 isEnglishPartner = false,
+                languageDesc = "日本語",
                 rallyCount = 1,
                 shouldSuggestLineInvite = false,
                 inputNode = null,
@@ -128,7 +135,9 @@ class LineAccessibilityService : AccessibilityService() {
             val result = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
 
             val summary = if (isBumble) {
-                val rallyPrefix = "ラリー${chatContext.rallyCount}回目 [${result.engine}]"
+                val profileTag = if (chatContext.profileSnippet.isNotBlank()) " 👤プロフ有" else ""
+                val langTag = if (chatContext.isEnglishPartner) " 🌐${chatContext.languageDesc}" else ""
+                val rallyPrefix = "ラリー${chatContext.rallyCount}回目$profileTag$langTag [${result.engine}]"
                 if (willInvite) {
                     if (chatContext.isEnglishPartner) "$rallyPrefix Ready for LINE! 🔥"
                     else "$rallyPrefix LINE交換チャンス！🔥"
@@ -136,13 +145,15 @@ class LineAccessibilityService : AccessibilityService() {
                     rallyPrefix
                 }
             } else {
-                "LINE: [相手]${chatContext.partnerMessageCount}件 / [自分]${chatContext.userMessageCount}件 [${result.engine}]"
+                val langTag = if (chatContext.isEnglishPartner) " 🌐${chatContext.languageDesc}" else ""
+                "LINE: [相手]${chatContext.partnerMessageCount}件 / [自分]${chatContext.userMessageCount}件$langTag [${result.engine}]"
             }
 
             overlayManager.showReplies(
                 platform = chatContext.platform,
                 summaryText = summary,
                 partnerMessage = chatContext.latestPartnerMessage,
+                profilePreview = chatContext.profileSnippet,
                 options = result.options,
                 showQuickInviteButton = isBumble && !willInvite,
                 onSelect = { selectedText ->

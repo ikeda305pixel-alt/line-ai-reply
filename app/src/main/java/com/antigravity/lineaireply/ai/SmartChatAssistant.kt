@@ -103,114 +103,80 @@ class SmartChatAssistant(
         }
 
         val isBumble = context.platform == "Bumble"
-        val isEnglish = context.isEnglishPartner
+        val isEnglishOrForeign = context.isEnglishPartner
+
+        val profileSection = if (context.profileSnippet.isNotBlank()) {
+            """
+            【相手のプロフィール・自己紹介・プロンプト情報（※超重要）】
+            ${context.profileSnippet}
+            """.trimIndent()
+        } else {
+            "【相手のプロフィール情報】\n（※画面からプロフィール文が直接取得できなかったため、会話ログの文脈から相手の興味・好みを分析してください）"
+        }
+
+        val partnerNameSection = if (context.partnerName.isNotBlank()) {
+            "【相手の名前/ニックネーム】: ${context.partnerName}\n"
+        } else ""
 
         val prompt = if (isBumble) {
-            if (isEnglish) {
-                if (shouldInvite) {
-                    """
-                    You are a witty, charismatic, real human on Bumble chatting with a match.
-                    The conversation has progressed nicely (${context.rallyCount} rallies).
-                    It is now the perfect natural moment to invite them to LINE to continue chatting and make plans.
+            """
+            あなたはマッチングアプリ（Bumble）で、相手の心を強く惹きつける最高に自然でリアルな返信を作成するプロの会話アシスタントです。
+            会話ログだけでなく、【相手のプロフィール情報（趣味、仕事、出身地、興味、プロンプト回答等）】を徹底的に活用し、相手の言語や文化的背景（外国人・英語話者・バイリンガル・日本人）に完璧に合わせた返信を4つのバリエーションで作成してください。
 
-                    Recent Dialogue Flow:
-                    $historyText
+            $partnerNameSection
+            【相手の背景・言語分析】
+            - 検出傾向: ${context.languageDesc} (外国人/英語話者の可能性: ${if (isEnglishOrForeign) "高" else "低/日本人"})
+            - 言語の適用ルール:
+              * 相手が英語話者（英語メッセージや海外プロフ）の場合: 英語で最高にチャーミングでウィットに富んだ返信を作成してください。
+              * 相手が外国人で日本語を使っている場合: 親しみやすく分かりやすい日本語（または英語を交えた自然なバイリンガルトーク）にしてください。
+              * 相手が日本人の場合: 相手のノリ（タメ口/敬語、絵文字、「笑」など）に同調した自然な日本語にしてください。
 
-                    Latest message from match:
-                    "${context.latestPartnerMessage}"
+            $profileSection
 
-                    Instructions:
-                    - Directly respond to their latest message with authentic chemistry and zero robotic fluff.
-                    - Keep it short (1-2 sentences), casual, matching their energy.
-                    - Option 4 MUST invite them to LINE using this exact link:
-                    "$EN_LINE_INVITE"
+            【直近の対話ログ（時系列順：上から下へ）】
+            $historyText
 
-                    Output strict JSON array only:
-                    [
-                      {"label": "🎯 Direct Answer", "text": "thoughtful, engaging response to their topic"},
-                      {"label": "🤝 Warm Connection", "text": "relatable shared vibe"},
-                      {"label": "😄 Witty Banter", "text": "playful tease or humor"},
-                      {"label": "📲 Switch to LINE", "text": "$EN_LINE_INVITE"}
-                    ]
-                    """.trimIndent()
-                } else {
-                    """
-                    You are a witty, charismatic, real human on Bumble chatting with a match.
-                    Early conversation (${context.rallyCount} rallies). Do NOT suggest LINE yet.
-                    Focus on strong chemistry, playful flirting, and deep interest in what they shared.
+            【相手の最新メッセージ】
+            "${context.latestPartnerMessage}"
 
-                    Recent Dialogue Flow:
-                    $historyText
+            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ】\n\"${context.latestMyMessage}\"" else ""}
 
-                    Latest message from match:
-                    "${context.latestPartnerMessage}"
+            【絶対厳守の返信生成ルール】
+            1. 【プロフィール情報の自然な拾い上げ（最重要）】
+               相手のプロフィールに書かれている話題（趣味、旅行、サウナ、映画、カフェ、音楽、仕事、出身地、プロンプト回答など）を自然に絡めて、「ちゃんとプロフを見て興味を持ってくれている！」という安心感と強い好感度を与えてください。
+            2. 【相手の発言・質問への確実な回答】
+               相手が質問している場合は、曖昧な相槌やごまかしは厳禁。具体的で明確な回答（時間、場所、料理ジャンル等）を必ず返してください。
+            3. 【4つの異なる返信ペルソナ】
+               - 案1 🎯【直球回答・プロフ深掘り】: 相手の質問に即答しつつ、相手の話題やプロフに魅力的に切り込む。
+               - 案2 🤝【共感・親近感】: 共通の趣味や価値観に優しく寄り添い、安心感を与える返答。
+               - 案3 😄【軽快ユーモア・ツッコミ】: クスッと笑える楽しい返し（Bumbleらしいチャーミングなイジり）。
+               - 案4 🚀【次の提案 / 📲 LINEへ移行】:
+                 ${if (shouldInvite) "絶妙なタイミングなので、自然な流れで以下のLINE移行文（リンク付き）を提示してください：\n" + (if (isEnglishOrForeign) "「$EN_LINE_INVITE」" else "「$JA_LINE_INVITE」") else "「今度〜行こ！」「おすすめ教えて！」と会話を次のアクションに進める提案。"}
+            4. 【AI構文・浅い定型文の完全追放】
+               「いいね！最近どう？」「お疲れ様です」「ご連絡ありがとうございます」などのAI構文は完全禁止。短文（1〜2文）でテンポよく返してください。
 
-                    Output strict JSON array only:
-                    [
-                      {"label": "🎯 Direct Answer", "text": "direct, authentic answer or reaction"},
-                      {"label": "🤝 Warm Connection", "text": "relatable interest in their vibe"},
-                      {"label": "😄 Witty Banter", "text": "light, charming tease"},
-                      {"label": "☕ Shared Vibe", "text": "curious question opening up fun topics"}
-                    ]
-                    """.trimIndent()
-                }
-            } else {
-                if (shouldInvite) {
-                    """
-                    あなたはマッチングアプリ（Bumble）で魅力的なやり取りをするプロの会話アシスタントです。
-                    会話が ${context.rallyCount} 回以上ラリーし、十分に打ち解けた絶妙なタイミングです。
-                    直前の相手の言葉に深く反応しつつ、自然にLINE交換を提案する返信を作ってください。
-
-                    【これまでの対話履歴（時系列順）】
-                    $historyText
-
-                    【相手の最新メッセージ】
-                    "${context.latestPartnerMessage}"
-
-                    【重要ルール】
-                    1. 「いいね！最近どう？」のような浅い定型文は厳禁。相手の具体的な話題（趣味、仕事、休日の過ごし方、感情）をしっかり拾ってください。
-                    2. 相手がタメ口ならタメ口、敬語なら親しみやすい敬語でトーンを同調させてください。
-                    3. 4つ目の選択肢は、必ず以下のLINE交換の誘導文（指定リンク付き）を自然に提案してください：
-                    「$JA_LINE_INVITE」
-
-                    出力は以下のJSON配列のみ：
-                    [
-                      {"label": "🎯 直球・リアクション", "text": "相手の話題に対するストレートで魅力的な反応"},
-                      {"label": "🤝 共感＋深掘り", "text": "親しみやすく話を広げる返し"},
-                      {"label": "😄 軽快なユーモア", "text": "クスッと笑える楽しい返し"},
-                      {"label": "📲 LINEへ移行", "text": "$JA_LINE_INVITE"}
-                    ]
-                    """.trimIndent()
-                } else {
-                    """
-                    あなたはマッチングアプリ（Bumble）で魅力的なやり取りをするプロの会話アシスタントです。
-                    序盤のやり取り（${context.rallyCount} ラリー目）なので、LINE交換はまだ急がず、相手が「この人と話すと楽しい！」と感じる魅力的な会話を広げてください。
-
-                    【これまでの対話履歴（時系列順）】
-                    $historyText
-
-                    【相手の最新メッセージ】
-                    "${context.latestPartnerMessage}"
-
-                    【重要ルール】
-                    1. 相手の最新メッセージに具体的に反応してください。おざなりな定型文は禁止です。
-                    2. 自然な親近感とユーモアを大切にしてください（短文1〜2文）。
-
-                    出力は以下のJSON配列のみ：
-                    [
-                      {"label": "🎯 直球・リアクション", "text": "相手の発言に対する具体的でリアルな反応"},
-                      {"label": "🤝 共感＋深掘り", "text": "共感しつつ自然に話を広げる返し"},
-                      {"label": "😄 軽快なユーモア", "text": "クスッと笑える楽しい返し"},
-                      {"label": "☕ 次の話題", "text": "共通の興味や休日の過ごし方を聞く返し"}
-                    ]
-                    """.trimIndent()
-                }
-            }
+            出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+            [
+              {"label": "🎯 直球・プロフ話題", "text": "（具体的回答またはプロフに触れた魅力的な返し）"},
+              {"label": "🤝 共感・親近感", "text": "（相手のノリや共通の趣味に寄り添う返し）"},
+              {"label": "😄 軽快ユーモア", "text": "（クスッと笑えるウィットな返し）"},
+              {"label": "${if (shouldInvite) "📲 LINEへ移行" else "🚀 次の提案"}", "text": "${if (shouldInvite) (if (isEnglishOrForeign) EN_LINE_INVITE else JA_LINE_INVITE) else "（具体的なお誘い・提案）"}"}
+            ]
+            """.trimIndent()
         } else {
-            // LINE context: heavily weight dialogue flow, speech-act and realism
+            // LINE context: heavily weight dialogue flow, speech-act and foreign/Japanese background
             """
             あなたはLINEで極めてリアルで人間らしい返信を作成する、プロの会話アシスタントです。
             会話の流れ（誰が何を言って、どうラリーが続いているか）を完全に把握し、相手の問いかけや言葉に対する「自然で的確な返信」を4つの異なるバリエーションで作成してください。
+            相手が外国人や英語話者の場合も自然に対応してください。
+
+            $partnerNameSection
+            【言語・文化的背景】
+            - 検出傾向: ${context.languageDesc}
+            - 相手が英語話者・英語メッセージの場合: 自然でフレンドリーな英語で返答してください。
+            - 相手がタメ口の日本語ならタメ口、敬語なら敬語、外国人風の日本語なら分かりやすく親切な日本語にしてください。
+
+            $profileSection
 
             【直近の会話履歴（時系列順：上から下へ）】
             $historyText
@@ -326,36 +292,37 @@ class SmartChatAssistant(
     private fun fallbackMockReplies(context: ChatContext, shouldInvite: Boolean): List<SmartReplyOption> {
         val latest = context.latestPartnerMessage.trim()
         val full = (context.conversationHistory.map { it.text } + latest).joinToString(" ")
+        val hasProfile = context.profileSnippet.isNotBlank()
 
         if (context.platform == "Bumble") {
             if (context.isEnglishPartner) {
                 return if (shouldInvite) {
                     listOf(
-                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a good vibe 😊"),
-                        SmartReplyOption("🤝 Warm Connection", "I totally relate to that! How did you first get into it?"),
+                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a great vibe 😊"),
+                        SmartReplyOption("🤝 Profile & Connection", if (hasProfile) "I saw on your profile that you're into that! How long have you been doing it?" else "I totally relate to that! How is your week going so far?"),
                         SmartReplyOption("😄 Witty Banter", "Okay, now you definitely owe me the full story behind that 😄"),
                         SmartReplyOption("📲 Switch to LINE", EN_LINE_INVITE)
                     )
                 } else {
                     listOf(
-                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a good vibe 😊"),
-                        SmartReplyOption("🤝 Warm Connection", "I totally relate to that! How is your week going so far?"),
+                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a great vibe 😊"),
+                        SmartReplyOption("🤝 Profile & Connection", if (hasProfile) "I saw on your profile that you're into that! What got you into it?" else "I totally relate to that! How is your week going so far?"),
                         SmartReplyOption("😄 Witty Banter", "Okay, now you definitely owe me the full story behind that 😄"),
-                        SmartReplyOption("☕ Shared Topic", "By the way, what do you usually like doing on weekends? ✨")
+                        SmartReplyOption("☕ Shared Topic", "By the way, what kind of things do you usually enjoy on weekends? ✨")
                     )
                 }
             } else {
                 return if (shouldInvite) {
                     listOf(
-                        SmartReplyOption("🎯 直球・リアクション", "めっちゃわかります！それすごく楽しそうですね😊"),
+                        SmartReplyOption("🎯 直球・プロフ話題", if (hasProfile) "プロフ見て気になってました！すごく楽しそうですね😊" else "めっちゃわかります！すごく楽しそうですね😊"),
                         SmartReplyOption("🤝 共感＋深掘り", "お話しやすくて嬉しいです✨ 普段はどんなことされてるんですか？"),
                         SmartReplyOption("😄 軽快なユーモア", "センス良すぎます😂 もっと詳しく聞かせてほしいです！"),
                         SmartReplyOption("📲 LINEへ移行", JA_LINE_INVITE)
                     )
                 } else {
                     listOf(
-                        SmartReplyOption("🎯 直球・リアクション", "めっちゃわかります！それすごく楽しそうですね😊"),
-                        SmartReplyOption("🤝 共感＋深掘り", "プロフの写真も素敵でした！休日は何して過ごすことが多いですか？✨"),
+                        SmartReplyOption("🎯 直球・プロフ話題", if (hasProfile) "プロフ見て気になってました！休日は何して過ごすことが多いですか？✨" else "めっちゃわかります！休日は何して過ごすことが多いですか？✨"),
+                        SmartReplyOption("🤝 共感＋深掘り", "写真も素敵でした！お話しできて嬉しいです😊"),
                         SmartReplyOption("😄 軽快なユーモア", "センス良すぎます😂 もっと詳しく聞かせてほしいです！"),
                         SmartReplyOption("☕ 次の話題", "私もそれ好きです！おすすめのスポットとかありますか？☕")
                     )
@@ -364,6 +331,15 @@ class SmartChatAssistant(
         }
 
         // LINE: Real human replies tailored to speech act
+        if (context.isEnglishPartner) {
+            return listOf(
+                SmartReplyOption("🎯 Direct Answer", "Sounds awesome! Count me in 👍"),
+                SmartReplyOption("🤝 Friendly Vibe", "Totally agree with you! How is everything going on your end? 😊"),
+                SmartReplyOption("😄 Witty / Fun", "Haha that made my day! You always have the best stories 😂"),
+                SmartReplyOption("🚀 Next Plan", "Let's definitely catch up soon! When are you free next? ✨")
+            )
+        }
+
         return when {
             // Question: time / date
             latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(

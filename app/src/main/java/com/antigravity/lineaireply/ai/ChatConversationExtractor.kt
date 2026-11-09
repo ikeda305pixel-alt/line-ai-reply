@@ -12,11 +12,13 @@ data class MessageTurn(
 
 data class ChatContext(
     val platform: String, // "LINE" or "Bumble"
+    val partnerName: String,
     val conversationHistory: List<MessageTurn>,
     val latestPartnerMessage: String,
     val latestMyMessage: String,
     val profileSnippet: String,
     val isEnglishPartner: Boolean,
+    val languageDesc: String,
     val rallyCount: Int,
     val shouldSuggestLineInvite: Boolean,
     val inputNode: AccessibilityNodeInfo?,
@@ -25,10 +27,12 @@ data class ChatContext(
 )
 
 /**
- * High-precision spatial conversation extractor for LINE and Bumble.
- * Distinguishes speaker based on screen coordinates (Left = Partner, Right = Me),
- * filters out timestamps, dates, and header/footer UI noise,
- * and reconstructs chronological multi-turn dialogue.
+ * Spatial conversation & profile extractor for LINE and Bumble.
+ * Features:
+ * - Left/Right screen coordinate speaker attribution (Left = Partner, Right = Me).
+ * - Full profile bio & prompt extraction for Bumble matches (cached across screen views).
+ * - Multi-language and foreigner detection (English, bilingual, Japanese).
+ * - Partner name extraction from screen header.
  */
 object ChatConversationExtractor {
 
@@ -43,8 +47,30 @@ object ChatConversationExtractor {
         "メッセージを入力", "メッセージを入力してください", "type a message", "type something",
         "ホーム", "トーク", "タイムライン", "voom", "ニュース", "ウォレット", "メニュー", "検索",
         "戻る", "設定", "スタンプを送信しました", "写真を送信しました", "動画を送信しました",
-        "ピン留め", "通知オフ", "ブロック", "通報"
+        "ピン留め", "通知オフ", "ブロック", "通報", "matches", "chats", "swipe", "liked", "filter"
     )
+
+    private val PROFILE_KEYWORDS = setOf(
+        "about me", "my bio", "lives in", "from", "hometown", "work", "job", "company",
+        "education", "college", "university", "looking for", "languages", "interests",
+        "height", "drinking", "smoking", "pets", "non-negotiable", "simple pleasures",
+        "swipe right", "get along if", "excited about", "quickest way", "spotify", "instagram",
+        "自己紹介", "仕事", "職業", "勤務先", "出身", "居住地", "学校", "学歴", "恋愛観",
+        "言語", "身長", "血液型", "お酒", "タバコ", "ペット", "趣味", "興味", "プロンプト", "ステータスメッセージ"
+    )
+
+    // Cached profile across views in Bumble
+    private var cachedBumbleProfile: String = ""
+
+    fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?) {
+        if (rootNode == null) return
+        val profileList = mutableListOf<String>()
+        scanForProfileTexts(rootNode, profileList)
+        val snippet = profileList.distinct().take(4).joinToString(" | ")
+        if (snippet.isNotBlank()) {
+            cachedBumbleProfile = snippet
+        }
+    }
 
     fun extract(
         rootNode: AccessibilityNodeInfo?,
@@ -65,8 +91,21 @@ object ChatConversationExtractor {
 
         val inputNode = findInputEditText(rootNode)
 
+        // 1. Extract Partner Name from top header
+        val partnerName = extractHeaderTitle(rootNode, effectiveHeight)
+
+        // 2. Extract Profile Snippets (especially for Bumble)
+        val visibleProfileList = mutableListOf<String>()
+        scanForProfileTexts(rootNode, visibleProfileList)
+        val visibleProfile = visibleProfileList.distinct().take(4).joinToString(" | ")
+        if (visibleProfile.isNotBlank()) {
+            cachedBumbleProfile = visibleProfile
+        }
+        val finalProfile = if (visibleProfile.isNotBlank()) visibleProfile else cachedBumbleProfile
+
+        // 3. Extract Message Nodes with spatial bounding boxes
         val rawCandidates = mutableListOf<RawTextNode>()
-        traverseNodes(rootNode, rawCandidates, effectiveWidth, effectiveHeight)
+        traverseChatNodes(rootNode, rawCandidates, effectiveWidth, effectiveHeight)
 
         // Deduplicate parent-child identical texts within close vertical coordinates
         val deduplicated = mutableListOf<RawTextNode>()
@@ -122,12 +161,8 @@ object ChatConversationExtractor {
         val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: messageTurns.last().text
         val latestMyMessage = myTurns.lastOrNull()?.text ?: ""
 
-        val profileSnippet = if (platform == "Bumble") {
-            messageTurns.map { it.text }.filter { it.length > 30 }.take(2).joinToString(" ")
-        } else ""
-
-        val combinedSample = (messageTurns.takeLast(6).map { it.text } + profileSnippet).joinToString(" ")
-        val isEnglish = detectIfEnglish(combinedSample)
+        val combinedSample = (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
+        val (isForeignOrEnglish, languageDesc) = detectLanguageBackground(combinedSample, finalProfile)
 
         val messageCount = messageTurns.size
         val rallyCount = ((messageCount + 1) / 2).coerceAtLeast(1)
@@ -135,11 +170,13 @@ object ChatConversationExtractor {
 
         return ChatContext(
             platform = platform,
+            partnerName = partnerName,
             conversationHistory = messageTurns.takeLast(10),
             latestPartnerMessage = latestPartnerMessage,
             latestMyMessage = latestMyMessage,
-            profileSnippet = profileSnippet,
-            isEnglishPartner = isEnglish,
+            profileSnippet = finalProfile,
+            isEnglishPartner = isForeignOrEnglish,
+            languageDesc = languageDesc,
             rallyCount = rallyCount,
             shouldSuggestLineInvite = shouldSuggestLineInvite,
             inputNode = inputNode,
@@ -148,12 +185,74 @@ object ChatConversationExtractor {
         )
     }
 
+    fun detectLanguageBackground(sample: String, profileText: String): Pair<Boolean, String> {
+        val combined = "$sample $profileText".trim()
+        if (combined.isEmpty()) return Pair(false, "日本語")
+
+        val latinCount = combined.count { it in 'a'..'z' || it in 'A'..'Z' }
+        val japaneseCount = combined.count { it in '\u3040'..'\u30ff' || it in '\u4e00'..'\u9faf' }
+
+        val hasForeignKeywords = Regex(
+            "from\\s+[a-z]+|lives?\\s+in|expat|native|english|speak|tokyo|japan|foreigner|travel|visit|study abroad|アメリカ|カナダ|オーストラリア|イギリス|ハーフ|海外|留学",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(combined)
+
+        val isEnglishDominant = latinCount > 20 && (japaneseCount == 0 || latinCount > japaneseCount * 2)
+        val isForeigner = isEnglishDominant || (latinCount > 10 && hasForeignKeywords)
+
+        val desc = when {
+            isEnglishDominant -> "英語"
+            isForeigner -> "外国人 / バイリンガル"
+            else -> "日本語"
+        }
+
+        return Pair(isForeigner, desc)
+    }
+
+    private fun extractHeaderTitle(root: AccessibilityNodeInfo, screenHeight: Int): String {
+        val topLimit = (screenHeight * 0.09).toInt()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.top < topLimit && rect.bottom <= topLimit + 80) {
+                val t = (node.text?.toString()?.trim() ?: "")
+                if (t.length in 2..20 && !isSystemLabel(t)) {
+                    return t
+                }
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { queue.add(it) }
+            }
+        }
+        return ""
+    }
+
+    private fun scanForProfileTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
+        val t = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
+        val lower = t.lowercase()
+
+        // Match profile prompt keywords or bio descriptions
+        val matchesKeyword = PROFILE_KEYWORDS.any { lower.contains(it) }
+        val isDescriptive = t.length in 18..300 && !isSystemLabel(t)
+
+        if ((matchesKeyword || isDescriptive) && !isSystemLabel(t)) {
+            list.add(t)
+        }
+
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { scanForProfileTexts(it, list) }
+        }
+    }
+
     private data class RawTextNode(
         val text: String,
         val rect: Rect
     )
 
-    private fun traverseNodes(
+    private fun traverseChatNodes(
         node: AccessibilityNodeInfo,
         list: MutableList<RawTextNode>,
         screenWidth: Int,
@@ -162,12 +261,10 @@ object ChatConversationExtractor {
         val rect = Rect()
         node.getBoundsInScreen(rect)
 
-        // Filter out header area (top 8%) and footer input area (bottom 10%)
         val topBound = (screenHeight * 0.08).toInt()
         val bottomBound = (screenHeight * 0.90).toInt()
 
         val isInMessageArea = rect.top >= topBound && rect.bottom <= bottomBound
-
         val rawText = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
 
         if (isInMessageArea && rawText.isNotBlank()) {
@@ -178,7 +275,7 @@ object ChatConversationExtractor {
         }
 
         for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { traverseNodes(it, list, screenWidth, screenHeight) }
+            node.getChild(i)?.let { traverseChatNodes(it, list, screenWidth, screenHeight) }
         }
     }
 
@@ -191,15 +288,6 @@ object ChatConversationExtractor {
         if (lower.startsWith("202") && lower.length < 15) return true
         if (trimmed == "既読" || trimmed == "未読") return true
         return false
-    }
-
-    private fun detectIfEnglish(sample: String): Boolean {
-        val trimmed = sample.trim()
-        if (trimmed.isEmpty()) return false
-        val hasJapanese = trimmed.any { it in '\u3040'..'\u30ff' || it in '\u4e00'..'\u9faf' }
-        if (hasJapanese) return false
-        val latinLetterCount = trimmed.count { it in 'a'..'z' || it in 'A'..'Z' }
-        return latinLetterCount > 8
     }
 
     private fun findInputEditText(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
