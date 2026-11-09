@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build Line AI Reply APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -28,22 +30,33 @@ jobs:
           gradle-version: '8.2'
 
       - name: Build with Gradle
-        run: gradle assembleDebug --stacktrace
+        run: |
+          gradle assembleDebug --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/line-ai-reply.apk
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: line-ai-reply.apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/line-ai-reply.apk
           retention-days: 14
 
       - name: Create GitHub Release with APK
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/line-ai-reply-app'
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          name: LINE AI Reply Assistant v1.0.0
-          body: "LINE専用 AI返信アシスタント（Pixel 7 / Android 13/14/15向け APK）"
-          files: app/build/outputs/apk/debug/app-debug.apk
+          name: LINE & Bumble AI Reply Assistant v1.0.0
+          body: |
+            ## LINE & Bumble AI返信アシスタント (Pixel 7 / Android 13/14/15 向け)
+
+            ### 主な機能
+            - **LINE**: 過去12件の会話の流れを最重視した自然な返信案を自動生成
+            - **Bumble**: 英語／日本語を自動見極め、LINE交換用リンク付き返信を自動提案
+              - LINE誘導リンク: `https://line.me/ti/p/TYxbDIk4sd`
+            - **安全設計**: 選択した返信は入力欄に下書き挿入されるのみ（勝手に送信されません）
+            - **直に入力**: 「✍️ 直に入力」ボタンでいつでも手動入力に切り替え可能
+            - **完全無料**: Google AI Studio 無料枠対応 ＆ オフラインでも動くスマートモック内蔵
+          files: app/build/outputs/apk/debug/line-ai-reply.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

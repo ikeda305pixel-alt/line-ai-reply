@@ -1,6 +1,7 @@
 package com.antigravity.lineaireply.service
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
@@ -13,9 +14,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.TextView
 import com.antigravity.lineaireply.R
-import com.antigravity.lineaireply.ai.LineReplyOption
+import com.antigravity.lineaireply.ai.SmartReplyOption
 
-class LineOverlayManager(private val context: Context) {
+class SmartOverlayManager(private val context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -26,7 +27,7 @@ class LineOverlayManager(private val context: Context) {
     // Reply Options Card
     private var cardView: View? = null
 
-    fun showBubble(onClick: () -> Unit) {
+    fun showBubble(platform: String, onClick: () -> Unit) {
         if (bubbleView != null) return
 
         val inflater = LayoutInflater.from(context)
@@ -54,7 +55,11 @@ class LineOverlayManager(private val context: Context) {
         bubbleParams = params
         bubbleView = view
 
-        // Draggable bubble support
+        val bubbleIcon = view.findViewById<TextView>(R.id.bubbleIcon)
+        if (platform == "Bumble") {
+            bubbleIcon.setBackgroundColor(Color.parseColor("#FFC629"))
+        }
+
         var initialX = 0
         var initialY = 0
         var touchDownX = 0f
@@ -107,8 +112,9 @@ class LineOverlayManager(private val context: Context) {
     }
 
     fun showReplies(
+        platform: String,
         summaryText: String,
-        options: List<LineReplyOption>,
+        options: List<SmartReplyOption>,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
         onDirectType: () -> Unit
@@ -161,7 +167,7 @@ class LineOverlayManager(private val context: Context) {
                 btn.text = "${opt.label}\n${opt.text}"
                 btn.setOnClickListener {
                     onSelect(opt.text)
-                    hideReplies() // Close sheet after inserting text
+                    hideReplies()
                 }
             } else {
                 btn.visibility = View.GONE
@@ -191,7 +197,7 @@ class LineOverlayManager(private val context: Context) {
         }
     }
 
-    fun insertTextIntoLineInput(inputNode: AccessibilityNodeInfo?, text: String): Boolean {
+    fun insertTextIntoInput(inputNode: AccessibilityNodeInfo?, text: String): Boolean {
         if (inputNode == null) return false
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)

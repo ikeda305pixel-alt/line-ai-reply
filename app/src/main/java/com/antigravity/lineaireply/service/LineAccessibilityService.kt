@@ -5,9 +5,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.antigravity.lineaireply.ai.ChatConversationExtractor
 import com.antigravity.lineaireply.ai.FreeTierGuard
-import com.antigravity.lineaireply.ai.GeminiLineAssistant
-import com.antigravity.lineaireply.ai.LineConversationExtractor
+import com.antigravity.lineaireply.ai.SmartChatAssistant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,42 +18,43 @@ class LineAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var prefs: SharedPreferences
     private lateinit var guard: FreeTierGuard
-    private lateinit var assistant: GeminiLineAssistant
-    private lateinit var overlayManager: LineOverlayManager
+    private lateinit var assistant: SmartChatAssistant
+    private lateinit var overlayManager: SmartOverlayManager
 
     companion object {
-        const val LINE_PKG = "jp.naver.line.android"
+        const val PKG_LINE = "jp.naver.line.android"
+        const val PKG_BUMBLE = "com.bumble.app"
     }
 
     override fun onCreate() {
         super.onCreate()
         prefs = getSharedPreferences("line_ai_prefs", Context.MODE_PRIVATE)
         guard = FreeTierGuard(this)
-        overlayManager = LineOverlayManager(this)
+        overlayManager = SmartOverlayManager(this)
 
         val key = prefs.getString("gemini_key", "") ?: ""
-        assistant = GeminiLineAssistant(key, guard)
+        assistant = SmartChatAssistant(key, guard)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: ""
 
-        if (pkg != LINE_PKG) {
+        if (pkg != PKG_LINE && pkg != PKG_BUMBLE) {
             overlayManager.hideAll()
             return
         }
 
         val root = rootInActiveWindow ?: return
-        val chatContext = LineConversationExtractor.extract(root)
+        val chatContext = ChatConversationExtractor.extract(root, pkg)
 
         if (chatContext == null) {
             overlayManager.hideAll()
             return
         }
 
-        // Show floating bubble trigger on LINE chat screen
-        overlayManager.showBubble {
+        // Show floating bubble trigger on active chat screen
+        overlayManager.showBubble(chatContext.platform) {
             triggerReplySuggestions(chatContext)
         }
 
@@ -67,24 +68,22 @@ class LineAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun triggerReplySuggestions(chatContext: com.antigravity.lineaireply.ai.LineChatContext) {
-        val summary = if (chatContext.conversationHistory.isNotEmpty()) {
-            "会話ログ ${chatContext.conversationHistory.size} 件を考慮中..."
+    private fun triggerReplySuggestions(chatContext: com.antigravity.lineaireply.ai.ChatContext) {
+        val summary = if (chatContext.platform == "Bumble") {
+            if (chatContext.isEnglishPartner) "Bumble (English partner detected)" else "Bumble (LINE誘導案を含めて生成中)"
         } else {
-            "最新メッセージを分析中..."
+            "LINE (会話ログ ${chatContext.conversationHistory.size} 件を考慮中)"
         }
 
         serviceScope.launch {
-            val options = assistant.generateReplies(
-                chatContext.conversationHistory,
-                chatContext.latestPartnerMessage
-            )
+            val options = assistant.generateReplies(chatContext)
 
             overlayManager.showReplies(
+                platform = chatContext.platform,
                 summaryText = summary,
                 options = options,
                 onSelect = { selectedText ->
-                    overlayManager.insertTextIntoLineInput(chatContext.inputNode, selectedText)
+                    overlayManager.insertTextIntoInput(chatContext.inputNode, selectedText)
                 },
                 onRegenerate = {
                     triggerReplySuggestions(chatContext)
