@@ -68,25 +68,42 @@ class LineAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun triggerReplySuggestions(chatContext: com.antigravity.lineaireply.ai.ChatContext) {
-        val summary = if (chatContext.platform == "Bumble") {
-            if (chatContext.isEnglishPartner) "Bumble (English partner detected)" else "Bumble (LINE誘導案を含めて生成中)"
+    private fun triggerReplySuggestions(
+        chatContext: com.antigravity.lineaireply.ai.ChatContext,
+        forceLineInvite: Boolean = false
+    ) {
+        val isBumble = chatContext.platform == "Bumble"
+        val willInvite = (chatContext.shouldSuggestLineInvite || forceLineInvite)
+
+        val summary = if (isBumble) {
+            val rallyPrefix = "ラリー${chatContext.rallyCount}回目"
+            if (willInvite) {
+                if (chatContext.isEnglishPartner) "$rallyPrefix (English: Ready for LINE! 🔥)"
+                else "$rallyPrefix (LINE交換の絶妙タイミング！🔥)"
+            } else {
+                if (chatContext.isEnglishPartner) "$rallyPrefix (English: Building chemistry)"
+                else "$rallyPrefix (まずは仲良くなるトーク案)"
+            }
         } else {
-            "LINE (会話ログ ${chatContext.conversationHistory.size} 件を考慮中)"
+            "LINE (過去ログ ${chatContext.conversationHistory.size} 件を考慮中)"
         }
 
         serviceScope.launch {
-            val options = assistant.generateReplies(chatContext)
+            val options = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
 
             overlayManager.showReplies(
                 platform = chatContext.platform,
                 summaryText = summary,
                 options = options,
+                showQuickInviteButton = isBumble && !willInvite,
                 onSelect = { selectedText ->
                     overlayManager.insertTextIntoInput(chatContext.inputNode, selectedText)
                 },
                 onRegenerate = {
-                    triggerReplySuggestions(chatContext)
+                    triggerReplySuggestions(chatContext, forceLineInvite = willInvite)
+                },
+                onQuickLineInvite = {
+                    triggerReplySuggestions(chatContext, forceLineInvite = true)
                 },
                 onDirectType = {
                     chatContext.inputNode?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)

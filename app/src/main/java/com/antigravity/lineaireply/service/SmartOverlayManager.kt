@@ -115,8 +115,10 @@ class SmartOverlayManager(private val context: Context) {
         platform: String,
         summaryText: String,
         options: List<SmartReplyOption>,
+        showQuickInviteButton: Boolean = false,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
+        onQuickLineInvite: () -> Unit,
         onDirectType: () -> Unit
     ) {
         if (cardView == null) {
@@ -150,6 +152,18 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         val v = cardView ?: return
+
+        val tagView = v.findViewById<TextView>(R.id.textPlatformTag)
+        if (platform == "Bumble") {
+            tagView.text = "Bumble AI"
+            tagView.setBackgroundColor(Color.parseColor("#FFC629"))
+            tagView.setTextColor(Color.parseColor("#1C1917"))
+        } else {
+            tagView.text = "LINE AI"
+            tagView.setBackgroundColor(Color.parseColor("#06C755"))
+            tagView.setTextColor(Color.WHITE)
+        }
+
         v.findViewById<TextView>(R.id.textContextSummary).text = summaryText
 
         val btnList = listOf(
@@ -172,6 +186,16 @@ class SmartOverlayManager(private val context: Context) {
             } else {
                 btn.visibility = View.GONE
             }
+        }
+
+        val btnQuickInvite = v.findViewById<Button>(R.id.btnQuickLineInvite)
+        if (showQuickInviteButton) {
+            btnQuickInvite.visibility = View.VISIBLE
+            btnQuickInvite.setOnClickListener {
+                onQuickLineInvite()
+            }
+        } else {
+            btnQuickInvite.visibility = View.GONE
         }
 
         v.findViewById<View>(R.id.btnClose).setOnClickListener {

@@ -52,11 +52,12 @@ jobs:
 
             ### 主な機能
             - **LINE**: 過去12件の会話の流れを最重視した自然な返信案を自動生成
-            - **Bumble**: 英語／日本語を自動見極め、LINE交換用リンク付き返信を自動提案
+            - **Bumble**: ラリー数（やり取りの回数）を自動検知し、仲良くなったベストなタイミングでLINE交換リンクを自動提案（英語／日本語も自動見極め）
               - LINE誘導リンク: `https://line.me/ti/p/TYxbDIk4sd`
             - **安全設計**: 選択した返信は入力欄に下書き挿入されるのみ（勝手に送信されません）
             - **直に入力**: 「✍️ 直に入力」ボタンでいつでも手動入力に切り替え可能
             - **完全無料**: Google AI Studio 無料枠対応 ＆ オフラインでも動くスマートモック内蔵
           files: app/build/outputs/apk/debug/line-ai-reply.apk
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

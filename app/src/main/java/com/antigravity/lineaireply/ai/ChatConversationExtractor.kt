@@ -8,6 +8,8 @@ data class ChatContext(
     val latestPartnerMessage: String,
     val profileSnippet: String,
     val isEnglishPartner: Boolean,
+    val rallyCount: Int,
+    val shouldSuggestLineInvite: Boolean,
     val inputNode: AccessibilityNodeInfo?
 )
 
@@ -45,12 +47,20 @@ object ChatConversationExtractor {
 
         val latest = textList.lastOrNull { !isSystemLabel(it) } ?: textList.last()
 
+        // Calculate rally count (message turns)
+        val messageCount = textList.size
+        val rallyCount = ((messageCount + 1) / 2).coerceAtLeast(1)
+        // Automatically suggest LINE invite after several rallies (e.g., rally >= 3 or messages >= 4)
+        val shouldSuggestLineInvite = platform == "Bumble" && (rallyCount >= 3 || messageCount >= 4)
+
         return ChatContext(
             platform = platform,
             conversationHistory = textList.takeLast(12),
             latestPartnerMessage = latest,
             profileSnippet = profileSnippet,
             isEnglishPartner = isEnglish,
+            rallyCount = rallyCount,
+            shouldSuggestLineInvite = shouldSuggestLineInvite,
             inputNode = inputNode
         )
     }
