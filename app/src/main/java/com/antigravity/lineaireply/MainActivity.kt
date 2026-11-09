@@ -60,6 +60,16 @@ class MainActivity : AppCompatActivity() {
         val btnImportLineTxt = findViewById<Button>(R.id.btnImportLineTxt)
         val btnPasteChatLog = findViewById<Button>(R.id.btnPasteChatLog)
 
+        val tvAppVersion = findViewById<TextView>(R.id.tvAppVersion)
+        val btnCheckUpdate = findViewById<Button>(R.id.btnCheckUpdate)
+
+        tvAppVersion.text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+        btnCheckUpdate.setOnClickListener {
+            val url = "https://github.com/ikeda305pixel-alt/line-ai-reply/releases/latest"
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            startActivity(browserIntent)
+        }
+
         editKey.setText(prefs.getString("gemini_key", ""))
         updateStatus(textStatus, textUserStyleStatus)
 

@@ -31,14 +31,15 @@ jobs:
 
       - name: Build with Gradle
         run: |
-          gradle assembleDebug --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/line-ai-reply.apk
+          gradle assembleRelease --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.0.apk
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: line-ai-reply.apk
-          path: app/build/outputs/apk/debug/line-ai-reply.apk
+          path: app/build/outputs/apk/release/line-ai-reply.apk
           retention-days: 14
 
       - name: Create GitHub Release with APK
@@ -46,11 +47,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.4.0
-          name: LINE & Bumble AI Reply Assistant v1.4.0
+          name: LINE & Bumble AI Reply Assistant v1.4.0 (固定署名・確実更新対応)
           body: |
             ## LINE & Bumble AI返信アシスタント v1.4.0 (過去全ログ学習・俺スタイル＆人間観察プロファイル版)
 
-            ### 最善の人間会話を極める大型アップデート
+            ### ⚠️ アップデート時の重要なお願い
+            - **固定署名キーストア導入**: 今後のアップデートを「更新」ボタンだけで100%確実に完了できるよう、署名鍵を固定化しました。
+            - 以前のバージョン（v1.1.2等）が端末に入っている場合、Androidのセキュリティ仕様により「署名不一致」で更新が弾かれることがあります。
+            - **一度古いアプリをアンインストール（削除）してから、この v1.4.0 をインストールしてください。**
+            - 以降のアップデートは、すべて「更新」をタップするだけで上書きアップデートできるようになります！
+
+            ### 最善の人間会話を極める大型アップデート内容
+            - **画面ヘッダーにバージョン表示（v1.4.0）＆ワンタップ更新ボタン**:
+              アプリを開けば確実に最新版が動いていることが一目で確認可能。
             - **全過去ログ学習インポーター（LINE .txt & 貼り付け対応）**:
               アプリ内から「LINEトーク履歴（.txt）」またはテキスト貼り付けで過去ログを一括学習。自分の口調・言い回し・語尾・ツッコミ癖をAIが完全吸収。
             - **俺スタイル（ユーザー文体）× コミュ力プロフェッショナルの融合**:
@@ -61,7 +70,9 @@ jobs:
               LINEやBumbleで画面をスクロールするたびに、過去のやり取りをローカルメモリに自動蓄積。
             - **前バージョンからの継承**:
               空間座標による左右話者分離、Bumbleプロフィール連動、外国人・英語話者自動見極め、質問へのド直球即答。
-          files: app/build/outputs/apk/debug/line-ai-reply.apk
+          files: |
+            app/build/outputs/apk/release/line-ai-reply.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.0.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

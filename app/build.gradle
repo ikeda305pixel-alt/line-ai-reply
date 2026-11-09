@@ -11,15 +11,28 @@ android {
         applicationId "com.antigravity.lineaireply"
         minSdk 26
         targetSdk 34
-        versionCode 7
+        versionCode 8
         versionName "1.4.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        fixedKey {
+            storeFile file("release.keystore")
+            storePassword "lineaireplypass"
+            keyAlias "lineaireply"
+            keyPassword "lineaireplypass"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.fixedKey
+        }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.fixedKey
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -35,6 +48,7 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 
