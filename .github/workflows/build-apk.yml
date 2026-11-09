@@ -45,18 +45,16 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: LINE & Bumble AI Reply Assistant v1.0.0
+          tag_name: v1.1.0
+          name: LINE & Bumble AI Reply Assistant v1.1.0
           body: |
-            ## LINE & Bumble AI返信アシスタント (Pixel 7 / Android 13/14/15 向け)
+            ## LINE & Bumble AI返信アシスタント v1.1.0 (文脈深掘り＆Gemini 1.5 Flash搭載)
 
-            ### 主な機能
-            - **LINE**: 過去12件の会話の流れを最重視した自然な返信案を自動生成
-            - **Bumble**: ラリー数（やり取りの回数）を自動検知し、仲良くなったベストなタイミングでLINE交換リンクを自動提案（英語／日本語も自動見極め）
-              - LINE誘導リンク: `https://line.me/ti/p/TYxbDIk4sd`
-            - **安全設計**: 選択した返信は入力欄に下書き挿入されるのみ（勝手に送信されません）
-            - **直に入力**: 「✍️ 直に入力」ボタンでいつでも手動入力に切り替え可能
-            - **完全無料**: Google AI Studio 無料枠対応 ＆ オフラインでも動くスマートモック内蔵
+            ### 主なアップデート
+            - **Gemini 1.5 Flash 正式連携**: APIキー保存時にリアルタイム反映。アプリ内の「🔑 APIキーの通信テスト」で疎通確認可能。
+            - **タイムスタンプ・既読・システム表示の完全除去**: LINE画面から時間表示や既読表示を除外し、相手が送った実際の発言・会話ログのみをAIに高純度で供給。
+            - **文脈深掘りプロンプト**: 「いいね！最近どう？」のような浅い定型文を完全禁止。相手の具体的な発言キーワード（場所・食べ物・趣味・感情・ツッコミどころ）を拾って返す自然な返信を生成。
+            - **クリップボード自動コピー対応**: 返信選択時に入力欄への自動挿入に加え、万が一のためにクリップボードにも自動コピー。
           files: app/build/outputs/apk/debug/line-ai-reply.apk
           make_latest: true
         env:

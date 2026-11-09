@@ -21,41 +21,54 @@ object ChatConversationExtractor {
     const val PKG_LINE = "jp.naver.line.android"
     const val PKG_BUMBLE = "com.bumble.app"
 
+    private val TIMESTAMP_REGEX = Regex("^(午前|午後)?\\s*\\d{1,2}:\\d{2}$")
+    private val DATE_REGEX = Regex("^(\\d{1,4}[年/.-])?\\d{1,2}[月/.-]\\d{1,2}(日)?(\\s*\\(.*\\))?$")
+    private val SYSTEM_WORDS = setOf(
+        "line", "bumble", "送信", "send", "キャンセル", "cancel", "既読", "未読", "送信中",
+        "通話", "音声通話", "ビデオ通話", "アルバム", "ノート", "イベント", "スタンプ", "写真", "動画",
+        "メッセージを入力", "メッセージを入力してください", "type a message", "type something",
+        "ホーム", "トーク", "タイムライン", "voom", "ニュース", "ウォレット", "メニュー", "検索",
+        "戻る", "設定", "スタンプを送信しました", "写真を送信しました", "動画を送信しました"
+    )
+
     fun extract(rootNode: AccessibilityNodeInfo?, packageName: String): ChatContext? {
         if (rootNode == null) return null
 
         val platform = when (packageName) {
             PKG_LINE -> "LINE"
             PKG_BUMBLE -> "Bumble"
-            else -> return null
+            else -> "LINE"
         }
 
-        val inputNode = findInputEditText(rootNode) ?: return null
+        val inputNode = findInputEditText(rootNode)
 
-        val textList = mutableListOf<String>()
-        traverseTexts(rootNode, textList)
+        val rawList = mutableListOf<String>()
+        traverseTexts(rootNode, rawList)
 
-        if (textList.isEmpty()) return null
+        // Filter out system labels, dates, timestamps
+        val cleanList = rawList.filter { !isSystemLabel(it) }
 
-        // Detect if partner profile or messages indicate English
+        if (cleanList.isEmpty()) {
+            return null
+        }
+
         val profileSnippet = if (platform == "Bumble") {
-            textList.filter { it.length > 30 }.take(2).joinToString(" ")
+            cleanList.filter { it.length > 30 }.take(2).joinToString(" ")
         } else ""
 
-        val combinedSample = (textList.takeLast(5) + profileSnippet).joinToString(" ")
+        val combinedSample = (cleanList.takeLast(5) + profileSnippet).joinToString(" ")
         val isEnglish = detectIfEnglish(combinedSample)
 
-        val latest = textList.lastOrNull { !isSystemLabel(it) } ?: textList.last()
+        // The latest meaningful message
+        val latest = cleanList.last()
 
-        // Calculate rally count (message turns)
-        val messageCount = textList.size
+        val messageCount = cleanList.size
         val rallyCount = ((messageCount + 1) / 2).coerceAtLeast(1)
-        // Automatically suggest LINE invite after several rallies (e.g., rally >= 3 or messages >= 4)
         val shouldSuggestLineInvite = platform == "Bumble" && (rallyCount >= 3 || messageCount >= 4)
 
         return ChatContext(
             platform = platform,
-            conversationHistory = textList.takeLast(12),
+            conversationHistory = cleanList.takeLast(12),
             latestPartnerMessage = latest,
             profileSnippet = profileSnippet,
             isEnglishPartner = isEnglish,
@@ -70,15 +83,16 @@ object ChatConversationExtractor {
         if (trimmed.isEmpty()) return false
         val hasJapanese = trimmed.any { it in '\u3040'..'\u30ff' || it in '\u4e00'..'\u9faf' }
         if (hasJapanese) return false
-        // Contains typical English words or Latin letters
         val latinLetterCount = trimmed.count { it in 'a'..'z' || it in 'A'..'Z' }
-        return latinLetterCount > 10
+        return latinLetterCount > 8
     }
 
     private fun traverseTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
-        val text = node.text?.toString()?.trim() ?: ""
-        if (text.length in 2..400 && !isSystemLabel(text)) {
-            list.add(text)
+        val text = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
+        if (text.length in 2..500) {
+            if (list.lastOrNull() != text) {
+                list.add(text)
+            }
         }
         for (i in 0 until node.childCount) {
             node.getChild(i)?.let { traverseTexts(it, list) }
@@ -86,11 +100,14 @@ object ChatConversationExtractor {
     }
 
     private fun isSystemLabel(t: String): Boolean {
-        val lower = t.lowercase()
-        return lower in listOf(
-            "line", "bumble", "送信", "send", "キャンセル", "cancel",
-            "既読", "read", "通話", "スタンプ", "アルバム", "メッセージを入力", "type a message"
-        ) || lower.startsWith("202")
+        val trimmed = t.trim()
+        val lower = trimmed.lowercase()
+        if (lower in SYSTEM_WORDS) return true
+        if (TIMESTAMP_REGEX.matches(trimmed)) return true
+        if (DATE_REGEX.matches(trimmed)) return true
+        if (lower.startsWith("202") && lower.length < 15) return true
+        if (trimmed == "既読" || trimmed == "未読") return true
+        return false
     }
 
     private fun findInputEditText(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -99,7 +116,7 @@ object ChatConversationExtractor {
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
             val cls = node.className?.toString() ?: ""
-            if (cls.contains("EditText", ignoreCase = true) && node.isEditable) {
+            if (cls.contains("EditText", ignoreCase = true) || node.isEditable) {
                 return node
             }
             for (i in 0 until node.childCount) {

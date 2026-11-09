@@ -66,6 +66,15 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:text="@string/btn_open_overlay" />
+
+                <Button
+                    android:id="@+id/btnTestBubble"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="💬 今すぐバブルをテスト表示（動作確認）"
+                    android:textColor="@color/line_green_dark" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -119,6 +128,14 @@
                     android:textColor="#059669"
                     android:textSize="12sp"
                     android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnTestApiKey"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="🔑 APIキーの通信テスト" />
 
                 <TextView
                     android:layout_width="match_parent"

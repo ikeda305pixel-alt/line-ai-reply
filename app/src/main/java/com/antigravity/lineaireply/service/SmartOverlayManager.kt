@@ -222,13 +222,24 @@ class SmartOverlayManager(private val context: Context) {
     }
 
     fun insertTextIntoInput(inputNode: AccessibilityNodeInfo?, text: String): Boolean {
-        if (inputNode == null) return false
-        val args = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("AI Reply", text)
+            clipboard.setPrimaryClip(clip)
+        } catch (_: Exception) {}
+
+        if (inputNode != null) {
+            val args = Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            }
+            val ok = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            android.widget.Toast.makeText(context, "入力欄にセットしました（コピー済み）", android.widget.Toast.LENGTH_SHORT).show()
+            return ok
+        } else {
+            android.widget.Toast.makeText(context, "返信文をコピーしました！入力欄を長押しして貼り付けてください📋", android.widget.Toast.LENGTH_LONG).show()
+            return false
         }
-        val ok = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return ok
     }
 
     fun hideAll() {

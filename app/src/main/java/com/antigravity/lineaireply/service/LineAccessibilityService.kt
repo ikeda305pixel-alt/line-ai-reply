@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
+import com.antigravity.lineaireply.ai.ChatContext
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.SmartChatAssistant
 import kotlinx.coroutines.CoroutineScope
@@ -40,61 +41,97 @@ class LineAccessibilityService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: ""
 
-        if (pkg != PKG_LINE && pkg != PKG_BUMBLE) {
-            overlayManager.hideAll()
+        // Ignore System UI & Soft Keyboards so bubble stays visible when typing
+        if (pkg.isEmpty() ||
+            pkg.startsWith("com.android.systemui") ||
+            pkg.contains("inputmethod", ignoreCase = true) ||
+            pkg.contains("gboard", ignoreCase = true) ||
+            pkg.contains("ime", ignoreCase = true)
+        ) {
             return
         }
 
-        val root = rootInActiveWindow ?: return
+        if (pkg == PKG_LINE || pkg == PKG_BUMBLE || pkg == packageName) {
+            val platform = when (pkg) {
+                PKG_BUMBLE -> "Bumble"
+                else -> "LINE"
+            }
+
+            // Always show floating bubble when user is in LINE / Bumble
+            overlayManager.showBubble(platform) {
+                handleBubbleClicked(platform, pkg)
+            }
+
+            // Also trigger if user taps directly on a message bubble in chat
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                val source = event.source
+                val clickedText = source?.text?.toString()?.trim() ?: ""
+                if (clickedText.length in 2..200) {
+                    val root = rootInActiveWindow
+                    val chatContext = ChatConversationExtractor.extract(root, pkg)
+                    if (chatContext != null) {
+                        triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
+                    }
+                }
+            }
+        } else {
+            // User switched to another app (Home, Chrome, etc.)
+            overlayManager.hideAll()
+        }
+    }
+
+    private fun handleBubbleClicked(platform: String, pkg: String) {
+        val root = rootInActiveWindow
         val chatContext = ChatConversationExtractor.extract(root, pkg)
 
-        if (chatContext == null) {
-            overlayManager.hideAll()
-            return
-        }
-
-        // Show floating bubble trigger on active chat screen
-        overlayManager.showBubble(chatContext.platform) {
+        if (chatContext != null) {
             triggerReplySuggestions(chatContext)
-        }
-
-        // Also trigger if user taps directly on a message bubble
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-            val source = event.source
-            val clickedText = source?.text?.toString()?.trim() ?: ""
-            if (clickedText.length in 2..200) {
-                triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
-            }
+        } else {
+            // If user is on LINE friends/chat list or opening fresh
+            val fallbackContext = ChatContext(
+                platform = platform,
+                conversationHistory = listOf("こんにちは！"),
+                latestPartnerMessage = "こんにちは！最近どうですか？",
+                profileSnippet = "",
+                isEnglishPartner = false,
+                rallyCount = 1,
+                shouldSuggestLineInvite = false,
+                inputNode = null
+            )
+            triggerReplySuggestions(fallbackContext)
         }
     }
 
     private fun triggerReplySuggestions(
-        chatContext: com.antigravity.lineaireply.ai.ChatContext,
+        chatContext: ChatContext,
         forceLineInvite: Boolean = false
     ) {
         val isBumble = chatContext.platform == "Bumble"
         val willInvite = (chatContext.shouldSuggestLineInvite || forceLineInvite)
 
-        val summary = if (isBumble) {
-            val rallyPrefix = "ラリー${chatContext.rallyCount}回目"
-            if (willInvite) {
-                if (chatContext.isEnglishPartner) "$rallyPrefix (English: Ready for LINE! 🔥)"
-                else "$rallyPrefix (LINE交換の絶妙タイミング！🔥)"
-            } else {
-                if (chatContext.isEnglishPartner) "$rallyPrefix (English: Building chemistry)"
-                else "$rallyPrefix (まずは仲良くなるトーク案)"
-            }
-        } else {
-            "LINE (過去ログ ${chatContext.conversationHistory.size} 件を考慮中)"
-        }
+        // ALWAYS read the latest saved API key from SharedPreferences!
+        val key = prefs.getString("gemini_key", "") ?: ""
+        assistant.updateApiKey(key)
 
         serviceScope.launch {
-            val options = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
+            val result = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
+
+            val summary = if (isBumble) {
+                val rallyPrefix = "ラリー${chatContext.rallyCount}回目 [${result.engine}]"
+                if (willInvite) {
+                    if (chatContext.isEnglishPartner) "$rallyPrefix Ready for LINE! 🔥"
+                    else "$rallyPrefix LINE交換チャンス！🔥"
+                } else {
+                    rallyPrefix
+                }
+            } else {
+                "LINE: ログ${chatContext.conversationHistory.size}件 [${result.engine}]"
+            }
 
             overlayManager.showReplies(
                 platform = chatContext.platform,
                 summaryText = summary,
-                options = options,
+                options = result.options,
                 showQuickInviteButton = isBumble && !willInvite,
                 onSelect = { selectedText ->
                     overlayManager.insertTextIntoInput(chatContext.inputNode, selectedText)
