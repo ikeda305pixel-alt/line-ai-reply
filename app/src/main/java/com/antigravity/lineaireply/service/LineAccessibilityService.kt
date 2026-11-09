@@ -131,6 +131,7 @@ class LineAccessibilityService : AccessibilityService() {
             overlayManager.showReplies(
                 platform = chatContext.platform,
                 summaryText = summary,
+                partnerMessage = chatContext.latestPartnerMessage,
                 options = result.options,
                 showQuickInviteButton = isBumble && !willInvite,
                 onSelect = { selectedText ->

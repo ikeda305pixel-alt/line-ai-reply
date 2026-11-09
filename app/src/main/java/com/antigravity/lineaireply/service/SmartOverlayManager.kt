@@ -114,6 +114,7 @@ class SmartOverlayManager(private val context: Context) {
     fun showReplies(
         platform: String,
         summaryText: String,
+        partnerMessage: String = "",
         options: List<SmartReplyOption>,
         showQuickInviteButton: Boolean = false,
         onSelect: (String) -> Unit,
@@ -165,6 +166,16 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         v.findViewById<TextView>(R.id.textContextSummary).text = summaryText
+
+        v.findViewById<TextView>(R.id.textPartnerMessagePreview)?.let { preview ->
+            if (partnerMessage.isNotBlank()) {
+                preview.visibility = View.VISIBLE
+                val snippet = if (partnerMessage.length > 40) partnerMessage.take(40) + "…" else partnerMessage
+                preview.text = "💬 相手の言葉: 「$snippet」"
+            } else {
+                preview.visibility = View.GONE
+            }
+        }
 
         val btnList = listOf(
             v.findViewById<Button>(R.id.btnOpt1),
