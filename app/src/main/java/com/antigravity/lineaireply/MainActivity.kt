@@ -110,30 +110,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnTestApiKey.setOnClickListener {
-            val key = editKey.text.toString().trim()
-            if (key.isBlank()) {
+            val rawKey = editKey.text.toString()
+            val cleanKey = SmartChatAssistant.sanitizeApiKey(rawKey)
+            if (cleanKey.isBlank()) {
                 Toast.makeText(this, "⚠️ 先にAPIキーを入力してください", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            editKey.setText(cleanKey)
 
             btnTestApiKey.isEnabled = false
-            btnTestApiKey.text = "Gemini 1.5 Flash 通信中..."
+            btnTestApiKey.text = "Gemini 通信確認中..."
 
             lifecycleScope.launch {
-                val (success, details) = SmartChatAssistant.testApiKey(key)
+                val (success, details) = SmartChatAssistant.testApiKey(cleanKey)
                 btnTestApiKey.isEnabled = true
                 btnTestApiKey.text = "🔑 APIキーの通信テスト"
 
                 if (success) {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("✅ 通信成功！")
-                        .setMessage("Gemini 1.5 Flash と正常に通信できました！\nLINEやBumbleで文脈を深く汲み取った高精度なAI返信が利用可能です。")
+                        .setMessage(details)
                         .setPositiveButton("OK", null)
                         .show()
                 } else {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("❌ 通信エラー")
-                        .setMessage("Gemini APIとの通信に失敗しました。\n\n【詳細】\n$details\n\n※Google AI StudioでAPIキーを再確認するか、通信環境をご確認ください。")
+                        .setMessage(details)
                         .setPositiveButton("閉じる", null)
                         .show()
                 }
@@ -149,11 +151,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSave.setOnClickListener {
-            val key = editKey.text.toString().trim()
+            val rawKey = editKey.text.toString()
+            val cleanKey = SmartChatAssistant.sanitizeApiKey(rawKey)
+            editKey.setText(cleanKey)
+
+            if (cleanKey.isNotBlank() && !cleanKey.startsWith("AIzaSy")) {
+                AlertDialog.Builder(this)
+                    .setTitle("⚠️ APIキーの確認")
+                    .setMessage("入力されたキーは 'AIzaSy' から始まっていません。\n\nGoogle AI Studio (aistudio.google.com) で取得したGemini APIキーであることをご確認ください。\n\nこのまま保存しますか？")
+                    .setPositiveButton("保存する") { _, _ ->
+                        prefs.edit().putString("gemini_key", cleanKey).apply()
+                        Toast.makeText(this, "APIキーを保存しました ✅", Toast.LENGTH_SHORT).show()
+                        updateStatus(textStatus, textUserStyleStatus)
+                    }
+                    .setNegativeButton("再確認する", null)
+                    .show()
+                return@setOnClickListener
+            }
+
             prefs.edit()
-                .putString("gemini_key", key)
+                .putString("gemini_key", cleanKey)
                 .apply()
-            Toast.makeText(this, "設定を保存しました！直ちに反映されます", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "設定を保存しました！直ちに反映されます ✅", Toast.LENGTH_SHORT).show()
             updateStatus(textStatus, textUserStyleStatus)
         }
     }

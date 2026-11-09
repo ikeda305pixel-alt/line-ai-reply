@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.0.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.1.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,33 +46,27 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.0
-          name: LINE & Bumble AI Reply Assistant v1.4.0 (固定署名・確実更新対応)
+          tag_name: v1.4.1
+          name: LINE & Bumble AI Reply Assistant v1.4.1 (APIエラー完全対策・親切解説版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.4.0 (過去全ログ学習・俺スタイル＆人間観察プロファイル版)
+            ## LINE & Bumble AI返信アシスタント v1.4.1 (APIエラー完全対策・自動サニタイズ版)
 
-            ### ⚠️ アップデート時の重要なお願い
-            - **固定署名キーストア導入**: 今後のアップデートを「更新」ボタンだけで100%確実に完了できるよう、署名鍵を固定化しました。
-            - 以前のバージョン（v1.1.2等）が端末に入っている場合、Androidのセキュリティ仕様により「署名不一致」で更新が弾かれることがあります。
-            - **一度古いアプリをアンインストール（削除）してから、この v1.4.0 をインストールしてください。**
-            - 以降のアップデートは、すべて「更新」をタップするだけで上書きアップデートできるようになります！
+            ### 🔧 APIエラー対策＆通信安定化アップデート
+            - **APIキー自動サニタイズ**: コピペ時に紛れ込みやすい引用符（"）、前後の改行・空白・全角スペースを自動除去。
+            - **キー形式バリデーション＆パスワード可視化トグル**: Google AI Studioのキー（通常 `AIzaSy...`）と異なる場合に親切な確認ダイアログを表示。目玉アイコンで入力内容を目視確認可能。
+            - **HTTPエラーコード別の超親切な日本語解説**:
+              - HTTP 400: 無効なキー（末尾の欠け、別サービスのキー等）
+              - HTTP 403: Google Cloudプロジェクトの権限・API未有効化・地域制限
+              - HTTP 429: 無料枠のレート制限（1分置いて再試行）
+            - **複数モデル（1.5-flash / 1.5-flash-latest / 2.0-flash）自動フォールバック**: 1つのモデルがビジーやエラーでも自動的に次を試行。
+            - **Markdownコードブロック（```json）混入耐性**: AIがコードブロック付きで返答しても100%パースできる堅牢パーサーを搭載。
 
-            ### 最善の人間会話を極める大型アップデート内容
-            - **画面ヘッダーにバージョン表示（v1.4.0）＆ワンタップ更新ボタン**:
-              アプリを開けば確実に最新版が動いていることが一目で確認可能。
-            - **全過去ログ学習インポーター（LINE .txt & 貼り付け対応）**:
-              アプリ内から「LINEトーク履歴（.txt）」またはテキスト貼り付けで過去ログを一括学習。自分の口調・言い回し・語尾・ツッコミ癖をAIが完全吸収。
-            - **俺スタイル（ユーザー文体）× コミュ力プロフェッショナルの融合**:
-              プロの会話術（相手のわがまま・めんどくささ・チャラさを心地よく転がす心理誘導・傾聴テクニック）を用いつつ、言葉のチョイスは「俺が実際に送りそうなリアルな口調」でブレンド。
-            - **相手の人間観察・生活圏プロファイリング（生息エリアカルテ）**:
-              相手の生息エリア（渋谷・恵比寿、中目黒、中央線沿線等）や性格タイプ（わがまま、構ってちゃん、ノリ重視、警戒心強め等）を分析し、それに刺さる対応戦略を自動適用。
-            - **スクロール自動ログ蓄積（Real-time Auto-Harvesting）**:
-              LINEやBumbleで画面をスクロールするたびに、過去のやり取りをローカルメモリに自動蓄積。
-            - **前バージョンからの継承**:
-              空間座標による左右話者分離、Bumbleプロフィール連動、外国人・英語話者自動見極め、質問へのド直球即答。
+            ### 過去全ログ学習 ＆ コミュ力プロ × 俺スタイル
+            - LINEトーク履歴（.txt）または貼り付けから過去ログを一括学習。
+            - 相手の生息エリア（渋谷・恵比寿等）と人間性（わがまま・構ってちゃん等）をプロファイリングし、俺の口調をブレンドして心地よく転がす返信案を生成。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.0.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.1.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

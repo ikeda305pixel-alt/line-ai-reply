@@ -142,14 +142,20 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
 
-                <EditText
-                    android:id="@+id/editGeminiApiKey"
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="@string/hint_gemini_key"
-                    android:inputType="textPassword"
-                    android:textSize="14sp" />
+                    app:passwordToggleEnabled="true">
+
+                    <EditText
+                        android:id="@+id/editGeminiApiKey"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="AIzaSy... で始まるGemini APIキー"
+                        android:inputType="textPassword"
+                        android:textSize="14sp" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <TextView
                     android:id="@+id/textFreeTierStatus"

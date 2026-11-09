@@ -40,38 +40,135 @@ class SmartChatAssistant(
         const val JA_LINE_INVITE = "予定立てやすいのでライン交換してください!\n$USER_LINE_LINK"
         const val EN_LINE_INVITE = "It's much easier to plan and stay in touch on LINE! Let's connect here: $USER_LINE_LINK"
 
-        suspend fun testApiKey(key: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-            if (key.isBlank()) return@withContext Pair(false, "APIキーが空です")
-            try {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(8, TimeUnit.SECONDS)
-                    .readTimeout(10, TimeUnit.SECONDS)
-                    .build()
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key"
-                val body = JSONObject().apply {
-                    val parts = JSONArray().put(JSONObject().put("text", "Say OK"))
-                    put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+        /**
+         * Cleanses API keys: removes quotes, line breaks, leading/trailing spaces, and full-width spaces.
+         */
+        fun sanitizeApiKey(rawKey: String): String {
+            return rawKey
+                .replace("\"", "")
+                .replace("'", "")
+                .replace(" ", "")
+                .replace("\t", "")
+                .replace("\n", "")
+                .replace("\r", "")
+                .replace("　", "")
+                .trim()
+        }
+
+        /**
+         * Robustly parses reply options from Gemini response text.
+         * Handles markdown fences (```json ... ```), raw JSON arrays, and wrapped JSON objects.
+         */
+        fun parseRepliesFromJson(rawText: String): List<SmartReplyOption> {
+            var text = rawText.trim()
+            if (text.startsWith("```")) {
+                val firstNewline = text.indexOf('\n')
+                if (firstNewline != -1) {
+                    text = text.substring(firstNewline + 1)
                 }
-                val req = Request.Builder()
-                    .url(endpoint)
-                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                    .build()
-                val resp = client.newCall(req).execute()
-                val code = resp.code
-                val respBody = resp.body?.string() ?: ""
-                if (resp.isSuccessful) {
-                    Pair(true, "通信成功 (HTTP $code)")
-                } else {
-                    Pair(false, "HTTP $code エラー: $respBody")
+                if (text.endsWith("```")) {
+                    text = text.substring(0, text.length - 3)
                 }
-            } catch (e: Exception) {
-                Pair(false, "通信例外: ${e.message}")
+                text = text.trim()
             }
+
+            val list = mutableListOf<SmartReplyOption>()
+
+            if (text.startsWith("{")) {
+                try {
+                    val obj = JSONObject(text)
+                    val candidateKeys = listOf("options", "replies", "candidates", "answers", "data")
+                    var array: JSONArray? = null
+                    for (k in candidateKeys) {
+                        if (obj.has(k)) {
+                            array = obj.optJSONArray(k)
+                            if (array != null) break
+                        }
+                    }
+                    if (array != null) {
+                        for (i in 0 until array.length().coerceAtMost(4)) {
+                            val item = array.getJSONObject(i)
+                            list.add(
+                                SmartReplyOption(
+                                    label = item.optString("label", "案 ${i + 1}"),
+                                    text = item.optString("text", "")
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed parsing JSONObject wrapper: ${e.message}")
+                }
+            } else if (text.startsWith("[")) {
+                try {
+                    val array = JSONArray(text)
+                    for (i in 0 until array.length().coerceAtMost(4)) {
+                        val item = array.getJSONObject(i)
+                        list.add(
+                            SmartReplyOption(
+                                label = item.optString("label", "案 ${i + 1}"),
+                                text = item.optString("text", "")
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed parsing JSONArray: ${e.message}")
+                }
+            }
+
+            return list
+        }
+
+        suspend fun testApiKey(rawKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+            val key = sanitizeApiKey(rawKey)
+            if (key.isBlank()) return@withContext Pair(false, "APIキーが入力されていません。")
+
+            val modelsToTry = listOf("gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash")
+            var lastError = ""
+
+            val testClient = OkHttpClient.Builder()
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+
+            for (model in modelsToTry) {
+                try {
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
+                    val body = JSONObject().apply {
+                        val parts = JSONArray().put(JSONObject().put("text", "Say OK"))
+                        put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+                    }
+                    val req = Request.Builder()
+                        .url(endpoint)
+                        .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        .build()
+
+                    val resp = testClient.newCall(req).execute()
+                    val code = resp.code
+                    val respBody = resp.body?.string() ?: ""
+
+                    if (resp.isSuccessful) {
+                        return@withContext Pair(true, "✅ Gemini ($model) との通信に成功しました！(HTTP $code)")
+                    } else {
+                        val friendlyMsg = when (code) {
+                            400 -> "HTTP 400 (無効なAPIキー)\n・APIキーが間違っているか、末尾が欠けている可能性があります。\n・Google AI Studio (aistudio.google.com) で作成したキー（通常 'AIzaSy' から始まる文字列）をご確認ください。"
+                            403 -> "HTTP 403 (権限・地域エラー)\n・Google CloudのGenerative Language APIが有効化されていないか、制限地域またはプロジェクトの権限設定をご確認ください。"
+                            404 -> "HTTP 404 (モデル未検出: $model)"
+                            429 -> "HTTP 429 (利用枠上限・レート制限)\n・Gemini APIの無料枠制限に達しました。1分ほど置いて再試行してください。"
+                            else -> "HTTP $code エラー: $respBody"
+                        }
+                        lastError = friendlyMsg
+                    }
+                } catch (e: Exception) {
+                    lastError = "通信例外: ${e.message}"
+                }
+            }
+            Pair(false, lastError)
         }
     }
 
     fun updateApiKey(newKey: String) {
-        apiKey = newKey.trim()
+        apiKey = sanitizeApiKey(newKey)
     }
 
     suspend fun generateReplies(
@@ -234,8 +331,8 @@ class SmartChatAssistant(
             """.trimIndent()
         }
 
-        // Try primary model (gemini-1.5-flash), then fallback model (gemini-2.0-flash)
-        val models = listOf("gemini-1.5-flash", "gemini-2.0-flash")
+        // Try primary model (gemini-1.5-flash), then gemini-1.5-flash-latest, then fallback model (gemini-2.0-flash)
+        val models = listOf("gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash")
         var lastError = ""
 
         for (model in models) {
@@ -257,31 +354,38 @@ class SmartChatAssistant(
                 val respStr = resp.body?.string() ?: ""
 
                 if (!resp.isSuccessful) {
-                    lastError = "HTTP $code: $respStr"
+                    val friendlyMsg = when (code) {
+                        400 -> "HTTP 400 (無効なAPIキー): キー形式を確認してください"
+                        403 -> "HTTP 403 (権限エラー): Google CloudでGenerative Language APIが有効か確認してください"
+                        404 -> "HTTP 404 (モデル $model 未検出)"
+                        429 -> "HTTP 429 (利用枠制限): しばらく待って再試行してください"
+                        else -> "HTTP $code: $respStr"
+                    }
+                    lastError = friendlyMsg
                     Log.w(TAG, "Model $model returned error: $lastError")
                     continue
                 }
 
                 guard.recordRequest()
                 val root = JSONObject(respStr)
-                val outputText = root.getJSONArray("candidates")
-                    .getJSONObject(0)
-                    .getJSONObject("content")
-                    .getJSONArray("parts")
-                    .getJSONObject(0)
-                    .getString("text")
-
-                val array = JSONArray(outputText.trim())
-                val list = mutableListOf<SmartReplyOption>()
-                for (i in 0 until array.length().coerceAtMost(4)) {
-                    val item = array.getJSONObject(i)
-                    list.add(
-                        SmartReplyOption(
-                            label = item.optString("label", "案 ${i + 1}"),
-                            text = item.optString("text", "")
-                        )
-                    )
+                val candidates = root.optJSONArray("candidates")
+                if (candidates == null || candidates.length() == 0) {
+                    val feedback = root.optJSONObject("promptFeedback")
+                    lastError = "生成結果が空です (ブロック理由: ${feedback?.optString("blockReason", "不明")})"
+                    continue
                 }
+
+                val candidateObj = candidates.getJSONObject(0)
+                val contentObj = candidateObj.optJSONObject("content")
+                val partsArray = contentObj?.optJSONArray("parts")
+                if (partsArray == null || partsArray.length() == 0) {
+                    val finishReason = candidateObj.optString("finishReason", "不明")
+                    lastError = "返信本文が空です (finishReason: $finishReason)"
+                    continue
+                }
+
+                val outputText = partsArray.getJSONObject(0).optString("text", "")
+                val list = parseRepliesFromJson(outputText)
 
                 if (list.isNotEmpty()) {
                     return@withContext GenerationResult(
@@ -289,6 +393,8 @@ class SmartChatAssistant(
                         engine = "Gemini (${model})",
                         errorDetails = null
                     )
+                } else {
+                    lastError = "JSONパース結果が空です: ${outputText.take(50)}"
                 }
             } catch (e: Exception) {
                 lastError = "例外 (${model}): ${e.message}"
@@ -296,7 +402,7 @@ class SmartChatAssistant(
             }
         }
 
-        // If both models failed, return high-quality context-aware fallback
+        // If all models failed, return high-quality context-aware fallback
         GenerationResult(
             options = fallbackMockReplies(context, shouldInvite, userStyle),
             engine = "定型文 (通信エラー)",

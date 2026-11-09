@@ -256,7 +256,8 @@ class ConversationMemoryManager(private val context: Context) {
                     .readTimeout(20, TimeUnit.SECONDS)
                     .build()
 
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
+                val cleanKey = SmartChatAssistant.sanitizeApiKey(apiKey)
+                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$cleanKey"
                 val body = JSONObject().apply {
                     val parts = JSONArray().put(JSONObject().put("text", prompt))
                     put("contents", JSONArray().put(JSONObject().put("parts", parts)))
@@ -273,14 +274,22 @@ class ConversationMemoryManager(private val context: Context) {
 
                 if (resp.isSuccessful) {
                     val root = JSONObject(respStr)
-                    val outputText = root.getJSONArray("candidates")
-                        .getJSONObject(0)
-                        .getJSONObject("content")
-                        .getJSONArray("parts")
-                        .getJSONObject(0)
-                        .getString("text")
+                    val candidates = root.optJSONArray("candidates")
+                    val contentObj = candidates?.optJSONObject(0)?.optJSONObject("content")
+                    val partsArray = contentObj?.optJSONArray("parts")
+                    var rawText = partsArray?.optJSONObject(0)?.optString("text", "") ?: ""
 
-                    val resultJson = JSONObject(outputText.trim())
+                    if (rawText.startsWith("```")) {
+                        val firstNewline = rawText.indexOf('\n')
+                        if (firstNewline != -1) {
+                            rawText = rawText.substring(firstNewline + 1)
+                        }
+                        if (rawText.endsWith("```")) {
+                            rawText = rawText.substring(0, rawText.length - 3)
+                        }
+                    }
+
+                    val resultJson = JSONObject(rawText.trim())
                     val userStyleSummary = resultJson.optString("user_style_summary", "")
                     val partnerLoc = resultJson.optString("partner_location", "都内")
                     val partnerPers = resultJson.optString("partner_personality", "ノリ重視")
