@@ -18,7 +18,7 @@ data class SmartReplyOption(
 
 data class GenerationResult(
     val options: List<SmartReplyOption>,
-    val engine: String, // "Gemini 1.5 Flash" or "モック (理由)"
+    val engine: String, // "Gemini 1.5 Flash" or "定型文 (理由)"
     val errorDetails: String? = null
 )
 
@@ -91,12 +91,17 @@ class SmartChatAssistant(
         if (!guard.canRequest()) {
             return@withContext GenerationResult(
                 options = fallbackMockReplies(context, shouldInvite),
-                engine = "定型文 (無料利用上限)",
+                engine = "定型文 (無料利用枠上限)",
                 errorDetails = "1日の無料利用枠（1,500回）またはレート制限に達しました"
             )
         }
 
-        val historyText = context.conversationHistory.joinToString("\n") { "・$it" }
+        val historyText = if (context.conversationHistory.isNotEmpty()) {
+            context.conversationHistory.joinToString("\n") { "[${it.speaker}]: ${it.text}" }
+        } else {
+            "[相手]: ${context.latestPartnerMessage}"
+        }
+
         val isBumble = context.platform == "Bumble"
         val isEnglish = context.isEnglishPartner
 
@@ -104,36 +109,37 @@ class SmartChatAssistant(
             if (isEnglish) {
                 if (shouldInvite) {
                     """
-                    You are a witty, charming dating assistant for Bumble.
+                    You are a witty, charismatic, real human on Bumble chatting with a match.
                     The conversation has progressed nicely (${context.rallyCount} rallies).
                     It is now the perfect natural moment to invite them to LINE to continue chatting and make plans.
 
-                    Recent chat history:
+                    Recent Dialogue Flow:
                     $historyText
 
                     Latest message from match:
                     "${context.latestPartnerMessage}"
 
                     Instructions:
-                    - Understand their latest message deeply and respond with genuine charm and chemistry.
+                    - Directly respond to their latest message with authentic chemistry and zero robotic fluff.
+                    - Keep it short (1-2 sentences), casual, matching their energy.
                     - Option 4 MUST invite them to LINE using this exact link:
                     "$EN_LINE_INVITE"
 
                     Output strict JSON array only:
                     [
-                      {"label": "😊 Warm + Follow-up", "text": "thoughtful response connecting to their topic"},
-                      {"label": "✨ Charming & Playful", "text": "engaging banter"},
-                      {"label": "😄 Witty Humorous", "text": "fun humorous take on what they said"},
+                      {"label": "🎯 Direct Answer", "text": "thoughtful, engaging response to their topic"},
+                      {"label": "🤝 Warm Connection", "text": "relatable shared vibe"},
+                      {"label": "😄 Witty Banter", "text": "playful tease or humor"},
                       {"label": "📲 Switch to LINE", "text": "$EN_LINE_INVITE"}
                     ]
                     """.trimIndent()
                 } else {
                     """
-                    You are a witty, charming dating assistant for Bumble.
+                    You are a witty, charismatic, real human on Bumble chatting with a match.
                     Early conversation (${context.rallyCount} rallies). Do NOT suggest LINE yet.
                     Focus on strong chemistry, playful flirting, and deep interest in what they shared.
 
-                    Recent chat history:
+                    Recent Dialogue Flow:
                     $historyText
 
                     Latest message from match:
@@ -141,21 +147,21 @@ class SmartChatAssistant(
 
                     Output strict JSON array only:
                     [
-                      {"label": "😊 Deep Question", "text": "curious, genuine question on their topic"},
-                      {"label": "✨ Playful Banter", "text": "light teasing or playful connection"},
-                      {"label": "😄 Humorous", "text": "witty, funny reply"},
-                      {"label": "☕ Shared Vibe", "text": "relatable shared experience"}
+                      {"label": "🎯 Direct Answer", "text": "direct, authentic answer or reaction"},
+                      {"label": "🤝 Warm Connection", "text": "relatable interest in their vibe"},
+                      {"label": "😄 Witty Banter", "text": "light, charming tease"},
+                      {"label": "☕ Shared Vibe", "text": "curious question opening up fun topics"}
                     ]
                     """.trimIndent()
                 }
             } else {
                 if (shouldInvite) {
                     """
-                    あなたはマッチングアプリ（Bumble）のプロの返信アシスタントです。
+                    あなたはマッチングアプリ（Bumble）で魅力的なやり取りをするプロの会話アシスタントです。
                     会話が ${context.rallyCount} 回以上ラリーし、十分に打ち解けた絶妙なタイミングです。
-                    直前の相手の言葉に深く共感しつつ、自然にLINE交換を提案する返信を作ってください。
+                    直前の相手の言葉に深く反応しつつ、自然にLINE交換を提案する返信を作ってください。
 
-                    【これまでの会話の流れ】
+                    【これまでの対話履歴（時系列順）】
                     $historyText
 
                     【相手の最新メッセージ】
@@ -163,23 +169,24 @@ class SmartChatAssistant(
 
                     【重要ルール】
                     1. 「いいね！最近どう？」のような浅い定型文は厳禁。相手の具体的な話題（趣味、仕事、休日の過ごし方、感情）をしっかり拾ってください。
-                    2. 4つ目の選択肢は、必ず以下のLINE交換の誘導文（指定リンク付き）を自然に提案してください：
+                    2. 相手がタメ口ならタメ口、敬語なら親しみやすい敬語でトーンを同調させてください。
+                    3. 4つ目の選択肢は、必ず以下のLINE交換の誘導文（指定リンク付き）を自然に提案してください：
                     「$JA_LINE_INVITE」
 
                     出力は以下のJSON配列のみ：
                     [
-                      {"label": "😊 共感＋深掘り", "text": "相手の話題に具体的に共感し、さらに話を広げる返信"},
-                      {"label": "✨ フレンドリー", "text": "親しみやすく魅力的なリアクション"},
-                      {"label": "😄 ユーモア", "text": "クスッと笑える楽しい返し"},
+                      {"label": "🎯 直球・リアクション", "text": "相手の話題に対するストレートで魅力的な反応"},
+                      {"label": "🤝 共感＋深掘り", "text": "親しみやすく話を広げる返し"},
+                      {"label": "😄 軽快なユーモア", "text": "クスッと笑える楽しい返し"},
                       {"label": "📲 LINEへ移行", "text": "$JA_LINE_INVITE"}
                     ]
                     """.trimIndent()
                 } else {
                     """
-                    あなたはマッチングアプリ（Bumble）のプロの返信アシスタントです。
+                    あなたはマッチングアプリ（Bumble）で魅力的なやり取りをするプロの会話アシスタントです。
                     序盤のやり取り（${context.rallyCount} ラリー目）なので、LINE交換はまだ急がず、相手が「この人と話すと楽しい！」と感じる魅力的な会話を広げてください。
 
-                    【これまでの会話の流れ】
+                    【これまでの対話履歴（時系列順）】
                     $historyText
 
                     【相手の最新メッセージ】
@@ -187,43 +194,61 @@ class SmartChatAssistant(
 
                     【重要ルール】
                     1. 相手の最新メッセージに具体的に反応してください。おざなりな定型文は禁止です。
-                    2. 自然な親近感とユーモアを大切にしてください。
+                    2. 自然な親近感とユーモアを大切にしてください（短文1〜2文）。
 
                     出力は以下のJSON配列のみ：
                     [
-                      {"label": "😊 共感＋質問", "text": "相手の発言に共感し、具体的な質問で返す"},
-                      {"label": "✨ フレンドリー", "text": "自分のエピソードや感想を交えた親しみやすい返し"},
-                      {"label": "😄 ユーモア", "text": "ちょっとクスッと笑える返し"},
-                      {"label": "☕ 共通の話題", "text": "お互いの趣味や好きなことを深掘りする返し"}
+                      {"label": "🎯 直球・リアクション", "text": "相手の発言に対する具体的でリアルな反応"},
+                      {"label": "🤝 共感＋深掘り", "text": "共感しつつ自然に話を広げる返し"},
+                      {"label": "😄 軽快なユーモア", "text": "クスッと笑える楽しい返し"},
+                      {"label": "☕ 次の話題", "text": "共通の興味や休日の過ごし方を聞く返し"}
                     ]
                     """.trimIndent()
                 }
             }
         } else {
-            // LINE context: heavily weight conversation flow and history
+            // LINE context: heavily weight dialogue flow, speech-act and realism
             """
-            あなたはLINEの会話相手へのメッセージを作成する、極めて優秀なAI返信アシスタントです。
-            相手との会話のキャッチボールを何よりも重視し、相手の言葉や質問に対する「的確で自然な返答・回答」を4つのバリエーションで作成してください。
+            あなたはLINEで極めてリアルで人間らしい返信を作成する、プロの会話アシスタントです。
+            会話の流れ（誰が何を言って、どうラリーが続いているか）を完全に把握し、相手の問いかけや言葉に対する「自然で的確な返信」を4つの異なるバリエーションで作成してください。
 
-            【最重要ルール】
-            1. 「相手の発言への直接の回答・返答」にしてください。
-               - 相手から質問されている場合（例：「何時にする？」「どこ行く？」「どっちがいい？」など）は、必ず質問に対する具体的・明確な回答案を提示してください。絶対に質問をスルーして別の話を始めないでください。
-               - 相手が予定や相談を持ちかけている場合は、相手の球を正面から受け止めて答えてください。
-            2. 「いいね！最近どう？」「連絡ありがとう！」などの誰にでも言えるおざなりな定型文は【完全禁止】です。
-            3. 日本のLINEらしい自然な口調、適切な絵文字、テンポの良い親しみやすさで作ってください。
-
-            【これまでの会話の流れ（過去最大12通）】
+            【直近の会話履歴（時系列順：上から下へ）】
             $historyText
 
             【直前の相手のメッセージ】
             "${context.latestPartnerMessage}"
 
+            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ（もしあれば）】\n\"${context.latestMyMessage}\"" else ""}
+
+            【絶対厳守の返信生成ルール】
+            1. 【質問へのド直球回答（最優先）】
+               相手が質問している場合（例：「何時にする？」「どこ行く？」「どっちがいい？」「何食べたい？」「知ってる？」等）、
+               案1（🎯 即答・ストレート）は、絶対に質問をごまかさず、具体的で明確な回答（具体的な時間・具体的な場所・食べたい料理ジャンル・明確なYes/No）を必ず返してください。
+               「いいね！最近どう？」「鋭い質問だね」「なんでもいいよ」「ちょうど考えてた」等の回答放棄は【完全禁止】です。
+
+            2. 【4つの異なる返信ペルソナ】
+               以下の4つの異なる角度・ノリで必ず作成してください：
+               - 案1 🎯【即答・ストレート】: 相手の問いかけや話題に対して、最も具体的かつストレートに答える。
+               - 案2 🤝【共感・ノリ合わせ】: 相手のテンションや感情（楽しそう、疲れた等）に優しく寄り添い、ノリを合わせた返答。
+               - 案3 😄【ツッコミ・軽快ユーモア】: 短くクスッと笑えるイジりやウィットに富んだ返し（「笑」「w」などを自然に交える）。
+               - 案4 🚀【次の提案・お誘い】: 「〜予約しとくね！」「〜行こっか！」と会話を行動に具体的に一歩進める提案。
+
+            3. 【トーン＆マナー・文字数の完全同調】
+               - 相手がタメ口（カジュアル）なら、100%タメ口で返してください。敬語は不自然なので禁止です。
+               - 相手が敬語（です・ます）なら、親しみやすい敬語で返してください。
+               - 相手の絵文字や「笑」「w」のノリに合わせてください。
+               - 1メッセージは短く（15〜40文字、1〜2文程度）。LINEらしいテンポ感を再現してください。
+
+            4. 【AI構文・優等生定型文の完全追放】
+               以下のフレーズは絶対に含めないでください：
+               ×「お疲れ様です」「ご連絡ありがとうございます」「素敵な質問ですね」「〜についてどう思いますか？」
+
             出力は以下のJSON配列のみ（Markdownコードブロック不要）：
             [
-              {"label": "💡 的確な回答・提案", "text": "（相手の質問や話題に対する具体的でストレートな返答）"},
-              {"label": "✨ 前向き・柔軟な回答", "text": "（相手に合わせたり好意的に乗っかる自然な返答）"},
-              {"label": "😄 ユーモア・ツッコミ", "text": "（相手の言葉を楽しく拾ってクスッと笑える返答）"},
-              {"label": "☕ 選択肢・次の提案", "text": "（「〜か〜はどう？」「今度〜しよう」など次の行動に繋がる返答）"}
+              {"label": "🎯 即答・ストレート", "text": "（具体的で明確な返答）"},
+              {"label": "🤝 共感・ノリ合わせ", "text": "（親近感や感情を受け止める返答）"},
+              {"label": "😄 ツッコミ・軽快", "text": "（クスッと笑えるテンポの良い返し）"},
+              {"label": "🚀 次の提案・お誘い", "text": "（行動を一歩進める具体的な提案）"}
             ]
             """.trimIndent()
         }
@@ -290,7 +315,7 @@ class SmartChatAssistant(
             }
         }
 
-        // If both models failed
+        // If both models failed, return high-quality context-aware fallback
         GenerationResult(
             options = fallbackMockReplies(context, shouldInvite),
             engine = "定型文 (通信エラー)",
@@ -299,86 +324,95 @@ class SmartChatAssistant(
     }
 
     private fun fallbackMockReplies(context: ChatContext, shouldInvite: Boolean): List<SmartReplyOption> {
-        val latest = context.latestPartnerMessage
-        val full = (context.conversationHistory + latest).joinToString(" ")
+        val latest = context.latestPartnerMessage.trim()
+        val full = (context.conversationHistory.map { it.text } + latest).joinToString(" ")
 
         if (context.platform == "Bumble") {
             if (context.isEnglishPartner) {
                 return if (shouldInvite) {
                     listOf(
-                        SmartReplyOption("😊 Warm + Question", "That sounds awesome! What got you into that recently? 😊"),
-                        SmartReplyOption("✨ Friendly", "Haha I totally relate! How is your week going so far?"),
-                        SmartReplyOption("😄 Playful", "Okay, now you definitely have to tell me the full story behind that 😄"),
+                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a good vibe 😊"),
+                        SmartReplyOption("🤝 Warm Connection", "I totally relate to that! How did you first get into it?"),
+                        SmartReplyOption("😄 Witty Banter", "Okay, now you definitely owe me the full story behind that 😄"),
                         SmartReplyOption("📲 Switch to LINE", EN_LINE_INVITE)
                     )
                 } else {
                     listOf(
-                        SmartReplyOption("😊 Warm + Question", "That sounds awesome! What got you into that recently? 😊"),
-                        SmartReplyOption("✨ Friendly", "Haha I totally relate! How is your week going so far?"),
-                        SmartReplyOption("😄 Playful Tease", "Okay, now you definitely have to tell me the full story behind that 😄"),
-                        SmartReplyOption("☕ Shared Topic", "By the way, what kind of things do you usually do on weekends? ✨")
+                        SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a good vibe 😊"),
+                        SmartReplyOption("🤝 Warm Connection", "I totally relate to that! How is your week going so far?"),
+                        SmartReplyOption("😄 Witty Banter", "Okay, now you definitely owe me the full story behind that 😄"),
+                        SmartReplyOption("☕ Shared Topic", "By the way, what do you usually like doing on weekends? ✨")
                     )
                 }
             } else {
                 return if (shouldInvite) {
                     listOf(
-                        SmartReplyOption("😊 共感＋質問", "すごくわかります！お話しやすくて嬉しいです✨ 普段はどんなことされてるんですか？"),
-                        SmartReplyOption("✨ フレンドリー", "いいですね！メッセージやり取りできて嬉しいです😊"),
-                        SmartReplyOption("😄 ユーモア", "センス良すぎます😂 もっと詳しく聞かせてください！"),
+                        SmartReplyOption("🎯 直球・リアクション", "めっちゃわかります！それすごく楽しそうですね😊"),
+                        SmartReplyOption("🤝 共感＋深掘り", "お話しやすくて嬉しいです✨ 普段はどんなことされてるんですか？"),
+                        SmartReplyOption("😄 軽快なユーモア", "センス良すぎます😂 もっと詳しく聞かせてほしいです！"),
                         SmartReplyOption("📲 LINEへ移行", JA_LINE_INVITE)
                     )
                 } else {
                     listOf(
-                        SmartReplyOption("😊 共感＋質問", "すごくわかります！お話しやすくて嬉しいです✨ 普段はどんなことされてるんですか？"),
-                        SmartReplyOption("✨ フレンドリー", "プロフの写真素敵ですね！休日は何して過ごすことが多いですか？😊"),
-                        SmartReplyOption("😄 ユーモア", "センス良すぎます😂 もっと詳しく聞かせてください！"),
-                        SmartReplyOption("☕ 共通の話題", "私もそれ好きです！おすすめのカフェとかありますか？✨")
+                        SmartReplyOption("🎯 直球・リアクション", "めっちゃわかります！それすごく楽しそうですね😊"),
+                        SmartReplyOption("🤝 共感＋深掘り", "プロフの写真も素敵でした！休日は何して過ごすことが多いですか？✨"),
+                        SmartReplyOption("😄 軽快なユーモア", "センス良すぎます😂 もっと詳しく聞かせてほしいです！"),
+                        SmartReplyOption("☕ 次の話題", "私もそれ好きです！おすすめのスポットとかありますか？☕")
                     )
                 }
             }
         }
 
-        // LINE: Smart contextual analysis based on keywords
+        // LINE: Real human replies tailored to speech act
         return when {
+            // Question: time / date
+            latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "19時くらいはどう？仕事終わりだからちょうど良さそう！"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "合わせるよ！そっちは何時くらいが都合いい？😊"),
+                SmartReplyOption("😄 ツッコミ・軽快", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻"),
+                SmartReplyOption("🚀 次の提案・お誘い", "金曜か土曜の夜ならいつでも空いてるよ！どっちがいい？")
+            )
+            // Question: location / place
+            latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "渋谷か新宿あたりが行きやすくて助かる！"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "そっちの行きやすいエリアに合わせるよ！どこら辺がいい？✨"),
+                SmartReplyOption("😄 ツッコミ・軽快", "美味しいご飯があるならどこへでも飛んでくよ笑😋"),
+                SmartReplyOption("🚀 次の提案・お誘い", "気になってるお店がいくつかあるからURL送るね！")
+            )
+            // Question: food / cuisine
+            latest.contains(Regex("[?？]")) && latest.contains(Regex("何食べ|何系|ご飯|ランチ|ディナー|店")) -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "お肉かイタリアンが食べたい気分！🥩"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "何でも美味しく食べられる！そっちは何か食べたいのある？😊"),
+                SmartReplyOption("😄 ツッコミ・軽快", "完全に飯テロだ笑 美味しいものならなんでも大歓迎😂"),
+                SmartReplyOption("🚀 次の提案・お誘い", "行きたいお店リストあるからピックアップして送るね！")
+            )
+            // General question
             latest.contains(Regex("[?？]")) -> listOf(
-                SmartReplyOption("😊 丁寧な回答", "それね！まさにちょうど考えてたところだったよ😊"),
-                SmartReplyOption("✨ 質問返し", "いい質問！ちなみにそっちはどう思う？✨"),
-                SmartReplyOption("😄 ユーモア", "鋭いところ突いてくるね〜！笑😂"),
-                SmartReplyOption("☕ 提案", "文章だと長くなりそうだから今度ゆっくり話そう！")
+                SmartReplyOption("🎯 即答・ストレート", "もちろん！全然大丈夫だよ👍"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "いいよ！そっちのペースに合わせるね😊"),
+                SmartReplyOption("😄 ツッコミ・軽快", "まさかの質問きた笑 どっちでもウェルカムだよ😂"),
+                SmartReplyOption("🚀 次の提案・お誘い", "今度直接会ったときに詳しく話そ！✨")
             )
-            full.contains(Regex("ご飯|カフェ|美味しい|ラーメン|焼肉|飲み|ランチ|ディナー|居酒屋|スイーツ")) -> listOf(
-                SmartReplyOption("😊 共感＋深掘り", "美味しそう！そのお店、前々から気になってたんだよね😋 おすすめメニューある？"),
-                SmartReplyOption("✨ フレンドリー", "いいね！美味しいもの食べてる時が一番幸せ✨ 写真見てたらお腹空いてきた！"),
-                SmartReplyOption("😄 ユーモア", "完全なる飯テロやめて〜！笑 今すぐ駆けつけたい😂"),
-                SmartReplyOption("☕ お誘い・提案", "よかったら今度一緒に行かない？🍽️ 予定合わせよう！")
+            // Fatigue / Empathy
+            full.contains(Regex("仕事|疲れた|残業|忙しい|眠い|大変|しんどい")) -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "今日もお疲れ様！本当によく頑張ったね🍵"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "大変だったね…！無理しないで今日はゆっくり休んでね🥺"),
+                SmartReplyOption("😄 ツッコミ・軽快", "それは疲れるやつだ😂 美味しいもの食べて癒やされて！"),
+                SmartReplyOption("🚀 次の提案・お誘い", "落ち着いたらパーッと美味しいものでも食べ行こ！")
             )
-            full.contains(Regex("映画|アニメ|ドラマ|ネトフリ|動画|YouTube|漫画|マンガ")) -> listOf(
-                SmartReplyOption("😊 共感＋深掘り", "それ気になってた作品！一番面白かった見どころってどこ？🎬"),
-                SmartReplyOption("✨ フレンドリー", "いいね！私も休日はよく動画観てまったりしてるよ〜😊"),
-                SmartReplyOption("😄 ユーモア", "それ見始めたら完全に夜更かし確定するやつだね😂"),
-                SmartReplyOption("☕ お誘い・提案", "今度おすすめ作品語り合おう✨ ぜひ教えて！")
+            // Food / Weekend
+            full.contains(Regex("ご飯|カフェ|美味しい|ラーメン|焼肉|飲み|ランチ|居酒屋|休み|週末")) -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "美味しそう！そのお店めっちゃ気になってたんだよね😋"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "いいね！美味しいもの食べてる時が一番幸せ✨"),
+                SmartReplyOption("😄 ツッコミ・軽快", "写真見てたら急にお腹空いてきたんだけど笑😂"),
+                SmartReplyOption("🚀 次の提案・お誘い", "今度一緒に行こ！予定合わせよ〜🍽️")
             )
-            full.contains(Regex("仕事|疲れた|残業|忙しい|眠い|大変")) -> listOf(
-                SmartReplyOption("😊 ねぎらい＋共感", "今日もお疲れ様！大変だったね🍵 無理しないでゆっくり休んでね"),
-                SmartReplyOption("✨ 励まし", "いつも本当にお疲れ様！週末まであと少し、応援してるよ💪"),
-                SmartReplyOption("😄 ユーモア", "お疲れ様！甘いものか美味しいご飯で自分にご褒美あげて😂"),
-                SmartReplyOption("☕ 気分転換", "落ち着いたら美味しいものでも食べてリフレッシュしに行こう☕")
+            else -> listOf(
+                SmartReplyOption("🎯 即答・ストレート", "それめっちゃわかる！まさに同じこと思ってたところ"),
+                SmartReplyOption("🤝 共感・ノリ合わせ", "いいじゃん！聞いてるだけで楽しそう😊"),
+                SmartReplyOption("😄 ツッコミ・軽快", "それは笑うんだけど😂 さすがだわ！"),
+                SmartReplyOption("🚀 次の提案・お誘い", "また詳しく聞かせて！近いうちに話そ✨")
             )
-            full.contains(Regex("休み|週末|土曜|日曜|祝日|連休|予定")) -> listOf(
-                SmartReplyOption("😊 休日トーク", "お休み満喫できてる？✨ 何か楽しい予定とかあるの？"),
-                SmartReplyOption("✨ フレンドリー", "いいね！休日はリフレッシュするのが一番だよね😊"),
-                SmartReplyOption("😄 ユーモア", "休みの日は時間が溶けるスピードが早すぎるよね😂"),
-                SmartReplyOption("☕ お誘い・提案", "もし時間合いそうなら、今度ふらっとカフェでも行かない？☕")
-            )
-            else -> {
-                val cleanTopic = if (latest.length > 20) latest.take(20) + "…" else latest
-                listOf(
-                    SmartReplyOption("😊 深い共感", "「$cleanTopic」ってことだよね！すごくわかる😊 それからどうなった？"),
-                    SmartReplyOption("✨ フレンドリー", "連絡ありがとう！ちょうど話したいなと思ってたところ✨"),
-                    SmartReplyOption("😄 ユーモア", "それ面白すぎる😂 さすがのセンスだね！笑"),
-                    SmartReplyOption("☕ お誘い・提案", "またゆっくり話そう！近いうちに予定合わせようね☕")
-                )
-            }
         }
     }
 }

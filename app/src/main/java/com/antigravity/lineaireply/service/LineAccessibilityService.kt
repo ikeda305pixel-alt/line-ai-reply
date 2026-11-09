@@ -8,6 +8,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
 import com.antigravity.lineaireply.ai.ChatContext
 import com.antigravity.lineaireply.ai.FreeTierGuard
+import com.antigravity.lineaireply.ai.MessageTurn
 import com.antigravity.lineaireply.ai.SmartChatAssistant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +69,10 @@ class LineAccessibilityService : AccessibilityService() {
                 val clickedText = source?.text?.toString()?.trim() ?: ""
                 if (clickedText.length in 2..200) {
                     val root = rootInActiveWindow
-                    val chatContext = ChatConversationExtractor.extract(root, pkg)
+                    val metrics = resources.displayMetrics
+                    val chatContext = ChatConversationExtractor.extract(
+                        root, pkg, metrics.widthPixels, metrics.heightPixels
+                    )
                     if (chatContext != null) {
                         triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
                     }
@@ -82,21 +86,28 @@ class LineAccessibilityService : AccessibilityService() {
 
     private fun handleBubbleClicked(platform: String, pkg: String) {
         val root = rootInActiveWindow
-        val chatContext = ChatConversationExtractor.extract(root, pkg)
+        val metrics = resources.displayMetrics
+        val chatContext = ChatConversationExtractor.extract(
+            root, pkg, metrics.widthPixels, metrics.heightPixels
+        )
 
         if (chatContext != null) {
             triggerReplySuggestions(chatContext)
         } else {
-            // If user is on LINE friends/chat list or opening fresh
             val fallbackContext = ChatContext(
                 platform = platform,
-                conversationHistory = listOf("こんにちは！"),
+                conversationHistory = listOf(
+                    MessageTurn("相手", "こんにちは！", true, 0)
+                ),
                 latestPartnerMessage = "こんにちは！最近どうですか？",
+                latestMyMessage = "",
                 profileSnippet = "",
                 isEnglishPartner = false,
                 rallyCount = 1,
                 shouldSuggestLineInvite = false,
-                inputNode = null
+                inputNode = null,
+                partnerMessageCount = 1,
+                userMessageCount = 0
             )
             triggerReplySuggestions(fallbackContext)
         }
@@ -109,7 +120,7 @@ class LineAccessibilityService : AccessibilityService() {
         val isBumble = chatContext.platform == "Bumble"
         val willInvite = (chatContext.shouldSuggestLineInvite || forceLineInvite)
 
-        // ALWAYS read the latest saved API key from SharedPreferences!
+        // ALWAYS reload the latest saved API key from SharedPreferences
         val key = prefs.getString("gemini_key", "") ?: ""
         assistant.updateApiKey(key)
 
@@ -125,7 +136,7 @@ class LineAccessibilityService : AccessibilityService() {
                     rallyPrefix
                 }
             } else {
-                "LINE: ログ${chatContext.conversationHistory.size}件 [${result.engine}]"
+                "LINE: [相手]${chatContext.partnerMessageCount}件 / [自分]${chatContext.userMessageCount}件 [${result.engine}]"
             }
 
             overlayManager.showReplies(
