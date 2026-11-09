@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">LINE AI返信アシスタント</string>
+    <string name="accessibility_description">LINEのトーク履歴を読み取り、メッセージに応じた返信プランを提示して入力欄にセットします。</string>
+    <string name="title_gemini_key">Gemini API キー (無料枠)</string>
+    <string name="desc_gemini_key">Google AI Studioで取得した無料キーを入力してください。未入力でもスマートモック機能で即座に動作します。</string>
+    <string name="hint_gemini_key">AIzaSy...</string>
+    <string name="btn_save">設定を保存</string>
+    <string name="btn_open_accessibility">ユーザー補助をONにする</string>
+    <string name="btn_open_overlay">重ねて表示を許可する</string>
+    <string name="status_free_tier">本日のAI利用数: %1$d / 1,500 回 (完全無料)</string>
+</resources>

@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.LineAiReply" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/line_green</item>
+        <item name="colorPrimaryDark">@color/line_green_dark</item>
+        <item name="android:windowBackground">@color/bg_light</item>
+    </style>
+</resources>
