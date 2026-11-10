@@ -45,7 +45,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
         }
 
         val historyText = if (allTurns.isNotEmpty()) {
-            val turnsToInclude = allTurns.takeLast(80)
+            val turnsToInclude = allTurns.takeLast(120)
             turnsToInclude.joinToString("\n") { turn ->
                 val spk = if (turn.isPartner) (context.partnerName.ifEmpty { "相手" }) else "自分"
                 "[$spk]: ${turn.text}"
@@ -61,26 +61,23 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             """.trimIndent()
         } else ""
 
-        val userSamplesText = userStyle.sampleQuotes.take(6).joinToString("\n") { "  ・$it" }
-
+        val userSamplesText = userStyle.sampleQuotes.take(10).joinToString("\n") { "  ・$it" }
         val partnerResolvedName = context.partnerName.ifEmpty { partnerDossier.name.ifEmpty { "相手" } }
 
         return if (isBumble) {
             """
-            あなたは【超一流の会話プロフェッショナル（心理学・恋愛工学・傾聴とツッコミの達人）】であり、同時に【ユーザー本人（俺）の分身】です。
-            相手の性格や生活圏、めんどくささやわがままさを見極め、プロの高度なコミュ力で相手を心地よく転がしつつ、言葉遣いやテンポは【俺のテイスト】をブレンドした最高の返信案を4つ作成してください。
+            あなたは【飾らない大人の魅力と自然なユーモアを持つユーザー本人（俺）の分身】です。
+            チャラいホスト風の褒め殺しやキザな恋愛工学は【完全禁止】です。女性が安心して楽しく話せる「自然体の誠実さ ＋ 爽やかなウィット（俺流）」で最高の返信案を4つ作成してください。
 
-            【相手（その人）の深層プロファイル（人間観察・生息エリア・性格分析カルテ）】
+            【相手（その人）の深層プロファイル】
             - 相手の名前/ニックネーム: $partnerResolvedName
-            - 推定生息エリア・生活圏: ${partnerDossier.location} (例: 渋谷・恵比寿、中目黒、中央線沿線、横浜など)
-            - 相手の性格タイプ分析: ${partnerDossier.personalityType} (例: わがまま、めんどくさい構ってちゃん、ノリ重視、警戒心強め、サバサバなど)
-            - プロとしての攻略・転がし方針: ${partnerDossier.strategy} (相手の機嫌を損ねず、主導権を握りながら好感度を最大化する戦略)
+            - 推定生息エリア・生活圏: ${partnerDossier.location} (例: 渋谷・恵比寿、中目黒、新宿、横浜など)
+            - 相手の性格タイプ分析: ${partnerDossier.personalityType} (例: わがまま、ノリ重視、警戒心強め、サバサバなど)
             $profileSection
 
             【言語・国際的背景】
             - 検出傾向: ${context.languageDesc} (外国人/英語話者の可能性: ${if (isEnglishOrForeign) "高" else "低/日本人"})
-            - 相手が英語話者の場合: チャーミングでウィットに富んだ自然な英語で作成してください。
-            - 相手が外国人で日本語を使っている場合: 親しみやすく分かりやすい日本語（または英語を交えた自然なバイリンガルトーク）にしてください。
+            - 相手が英語話者の場合: チャーミングで自然な英語で作成してください。
 
             【ユーザー本人の回答スタイル（自分がどういう回答をするのかの精密プロファイル）】
             - 回答・口調の特徴: ${userStyle.summary}
@@ -104,51 +101,39 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
             【絶対厳守の返信生成ルール】
             0. 【最重要：自分の発言への自己返信・相槌の完全禁止】
-               返信案は【相手のチャット（左側）】に対する返答です。右側にある「あなたのメッセージ」は自分がすでに送信済みの発言です。自分に対して返信したり、自分の言葉に相槌を打つような不自然な返信は【絶対に禁止】です。必ず相手の「${context.latestPartnerMessage}」に対して回答してください。
-            1. 【自分がどういう回答をするのかの100%再現】
-               上記の「ユーザー本人の回答スタイル」に基づき、ユーザー本人が実際に送るリアルな口調（語尾・テンポ・ツッコミのノリ）を完璧に再現してください。優等生AIのような敬語や定型文は【完全禁止】です。
-            2. 【その人（相手）の性格に合わせた転がし】
-               上記の「相手の深層プロファイル（性格・攻略方針）」に基づき、相手のわがまま・めんどくささ・ノリ・警戒心をプロのコミュ力で転がしてください。
-            3. 【蓄積された過去全ログの文脈反映】
-               上記に掲載されている「蓄積会話全ログ」を完全に理解し、過去に話した約束、食べ物の好み、行った場所、共有した笑いのノリを自然に踏まえた返信にしてください。
-            4. 【プロフィール・生息エリアの自然な拾い上げ】
-               相手のプロフィールや生息エリア（渋谷・恵比寿等）を自然に絡め、「ちゃんとプロフを見て興味を持ってくれている！」という安心感を与えてください。
-            5. 【質問へのド直球回答】
-               相手が質問している場合は、曖昧な相槌やごまかしは厳禁。具体的で明確な回答（時間、場所、料理ジャンル等）を必ず返してください。
-            6. 【4つの異なる返信ペルソナ】
-               - 案1 🎯【俺スタイル × ド直球即答】: ユーザー本人が言いそうなリアルな言葉遣いで、質問にズバッと答える。
-               - 案2 🤝【コミュ力プロ × 傾聴・転がし】: 相手のわがまま・めんどくささを華麗にいなし、機嫌を取るプロの返し。
-               - 案3 😄【俺流ツッコミ × 軽快ユーモア】: ユーザーのノリでクスッと笑わせる鋭いイジり・ツッコミ。
-               - 案4 🚀【主導権掌握 × 次の提案（/ 📲 LINEへ移行）】:
-                 ${if (shouldInvite) "絶妙なタイミングなので、自然な流れで以下のLINE移行文（リンク付き）を提示してください：\n" + (if (isEnglishOrForeign) "「$EN_LINE_INVITE」" else "「$JA_LINE_INVITE」") else "相手の生活圏を踏まえた具体的でスマートな提案。"}
+               必ず相手の「${context.latestPartnerMessage}」に対して回答してください。自分の発言への自己返信は厳禁です。
+            1. 【チャラさゼロ × 全部俺流】
+               安っぽい褒め言葉やホスト風の転がしは一切不要です。ユーザー本人の文体サンプルに忠実な、等身大で親しみやすい口調にしてください。
+            2. 【蓄積全ログの文脈理解】
+               蓄積された過去全ログを理解し、前に話した話題や好みを自然に踏まえてください。
+            3. 【4つの異なる俺流バリエーション】
+               - 案1 🎯【俺流・即答】: 自然体でド直球の好印象な即答。
+               - 案2 ☕️【俺流・共感質問】: 相手の話題・プロフに共感しつつ自然に広げる逆質問。
+               - 案3 😄【俺流・ツッコミ】: ギャップや話題にクスッと笑えるウィットなイジり。
+               - 案4 ${if (shouldInvite) "📲【俺流・LINE交換】" else "🚀【俺流・爽やか提案】"}: ${if (shouldInvite) "以下のLINE移行文（リンク付き）を自然に提示：\n" + (if (isEnglishOrForeign) "「$EN_LINE_INVITE」" else "「$JA_LINE_INVITE」") else "相手の生活圏を踏まえたサクッと気軽なご飯の提案。"}
 
             出力は以下のJSON配列のみ（Markdownコードブロック不要）：
             [
-              {"label": "🎯 俺スタイル即答", "text": "（ユーザー本人の口調での直球返答）"},
-              {"label": "🤝 プロの転がし・傾聴", "text": "（相手の性格を受け止めて機嫌を取る返し）"},
-              {"label": "😄 俺流ツッコミ", "text": "（クスッと笑えるウィットなイジり）"},
-              {"label": "${if (shouldInvite) "📲 LINEへ移行" else "🚀 主導権提案"}", "text": "${if (shouldInvite) (if (isEnglishOrForeign) EN_LINE_INVITE else JA_LINE_INVITE) else "（生活圏を踏まえたスマートな提案）"}"}
+              {"label": "🎯 俺流・即答", "text": "（自然体でド直球の好印象な即答）"},
+              {"label": "☕️ 俺流・共感質問", "text": "（共感して話題を広げる逆質問）"},
+              {"label": "😄 俺流・ツッコミ", "text": "（爽やかなイジり・笑い）"},
+              {"label": "${if (shouldInvite) "📲 LINE交換" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) (if (isEnglishOrForeign) EN_LINE_INVITE else JA_LINE_INVITE) else "（気軽な提案）"}"}
             ]
             """.trimIndent()
         } else {
+            // LINE context: Friends, Family, Work, Everyday Life
             """
-            あなたは【超一流の会話プロフェッショナル（心理学・恋愛工学・傾聴とツッコミの達人）】であり、同時に【ユーザー本人（俺）の分身】です。
-            相手の性格や生活圏、めんどくささやわがままさを見極め、プロの高度なコミュ力で相手を心地よく転がしつつ、言葉遣いやテンポは【俺のテイスト】をブレンドした最高の返信案を4つ作成してください。
+            あなたは【ユーザー本人（俺）そのもの】です。
+            ここはLINEのトーク画面です。相手は【友達・家族・同僚・知り合い】などの日常の人間関係です。
+            チャラい発言、思わせぶりな態度、ホスト風の転がし、キザな恋愛工学は【完全永久追放】です。
+            友達や家族に送っても1ミリも不自然さのない、100%等身大の「俺流（タメ口、短文、テンポ、飾らない親近感）」で、人間が日常チャットで最も必要とする【4大基本パターン（YES系、NO系、質問調整系、ツッコミ共感系）】の返信案を作成してください。
 
-            【相手（その人）の深層プロファイル（人間観察・生息エリア・性格分析カルテ）】
-            - 相手の名前/ニックネーム: $partnerResolvedName
-            - 推定生息エリア・生活圏: ${partnerDossier.location} (例: 渋谷・恵比寿、中目黒、中央線沿線、横浜など)
-            - 相手の性格タイプ分析: ${partnerDossier.personalityType} (例: わがまま、めんどくさい構ってちゃん、ノリ重視、警戒心強め、サバサバなど)
-            - プロとしての攻略・転がし方針: ${partnerDossier.strategy} (相手の機嫌を損ねず、主導権を握りながら好感度を最大化する戦略)
-            $profileSection
-
-            【言語・文化的背景】
-            - 検出傾向: ${context.languageDesc}
-            - 相手が英語話者・英語メッセージの場合: 自然でフレンドリーな英語で返答してください。
+            【相手の名前/グループ】: $partnerResolvedName
+            【相手の生活圏・特徴（もしあれば）】: ${partnerDossier.location}
 
             【ユーザー本人の回答スタイル（自分がどういう回答をするのかの精密プロファイル）】
             - 回答・口調の特徴: ${userStyle.summary}
-            - 典型的な言い回し・文体サンプル:
+            - 典型的な言い回し・文体サンプル（※このトーン＆マナーを4案すべてに100%適用せよ）:
             $userSamplesText
 
             【相手（$partnerResolvedName）との蓄積会話全ログ（★全件自動読込済・時系列：過去から現在へ）】
@@ -160,37 +145,35 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             - 直前のあなたのメッセージ（送信済み）: "${context.latestMyMessage}"
             - 【禁止】自分の発言「${context.latestMyMessage}」に対して自分で返信したり、自分に相槌を打つことは【絶対に禁止】です。相手の「${context.latestPartnerMessage}」への別案、または送信済みに続く自然な追加フォローを提案してください。
             """.trimIndent() else """
-            【直前の相手のメッセージ（★返信対象・左側チャット）】
+            【相手の最新メッセージ（★返信対象・左側チャット）】
             "${context.latestPartnerMessage}"
 
             ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ（右側・すでに送信済み）】\n\"${context.latestMyMessage}\"" else ""}
             """.trimIndent()}
 
-            【絶対厳守の返信生成ルール】
+            【LINE用・絶対厳守の返信生成ルール】
             0. 【最重要：自分の発言への自己返信・相槌の完全禁止】
-               あなたの返信は【相手のチャット（左側）】に対する返答でなければなりません。右側にある「あなたのメッセージ」は自分がすでに送信済みの発言です。自分に対して返信したり、自分の言葉に相槌を打つような不自然な返信は【絶対に禁止】です。必ず相手の「${context.latestPartnerMessage}」に対して回答してください。
-            1. 【自分がどういう回答をするのかの100%再現】
-               上記の「ユーザー本人の回答スタイル」に基づき、ユーザー本人が実際に送るリアルな口調（語尾・テンポ・ツッコミのノリ）を完璧に再現してください。優等生AIのような敬語や定型文は【完全禁止】です。
-            2. 【その人（相手）の性格に合わせた転がし】
-               上記の「相手の深層プロファイル（性格・攻略方針）」に基づき、相手のわがまま・めんどくささ・ノリ・警戒心をプロのコミュ力で転がしてください。
-            3. 【蓄積された過去全ログの文脈反映】
-               上記に掲載されている「蓄積会話全ログ」を完全に理解し、過去に話した約束、食べ物の好み、行った場所、共有した笑いのノリを自然に踏まえた返信にしてください。
-            3. 【生活圏・エリアを活かした提案】
-               相手の生息エリアや生活圏（渋谷、新宿、目黒、恵比寿など）が判明している場合、次のアクション提案（案4）でそのエリアに自然に触れてください。
-            4. 【質問へのド直球回答】
-               相手が質問している場合は、案1（🎯 即答）で絶対に曖昧にごまかさず、具体的で明確な回答を返してください。
-            5. 【4つの異なる返信ペルソナ】
-               - 案1 🎯【俺スタイル × ド直球即答】: ユーザー本人が言いそうなリアルな言葉遣いで、質問にズバッと答える。
-               - 案2 🤝【コミュ力プロ × 傾聴・転がし】: 相手のわがまま・めんどくささを華麗にいなし、機嫌を取るプロの返し。
-               - 案3 😄【俺流ツッコミ × 軽快ユーモア】: ユーザーのノリでクスッと笑わせる鋭いイジり・ツッコミ。
-               - 案4 🚀【主導権掌握 × 次の提案】: 相手の生活圏を踏まえた具体的でスマートな提案。
+               必ず相手のチャット「${context.latestPartnerMessage}」に対して回答してください。自分への自己返信は厳禁です。
+            1. 【チャラさ・恋愛工学の完全排除】
+               キザな口説きや不自然な褒め言葉は厳禁。家族や男友達に胸を張って送れる等身大の「俺」として返信してください。
+            2. 【全部「俺流」のトーン＆マナー】
+               4案すべてが「ユーザー本人が実際にLINEで送るリアルな言葉遣い（短文・語尾・ツッコミ・テンポ）」でなければなりません。優等生AIのような敬語や定型文は【完全禁止】です。
+            3. 【4大基本パターンの網羅】
+               - 案1 🎯【俺流・即答（YES / 了解）】:
+                 承諾、合意、快諾、感謝など、相手の提案・誘い・質問に「YES」とド直球に答える返答。（例:「おけ！行こ！」「了解〜！」「助かる、ありがとう！」）
+               - 案2 🙅‍♂️【俺流・代案（NO / 条件付き）】:
+                 角を立てずに断る、別の日程や場所を提案する、または「後で連絡する」などの条件付き返答。（例:「その日先約あって厳しいわ！来週どう？」「今バタバタしてるから夜連絡するね！」）
+               - 案3 💬【俺流・質問調整】:
+                 話や予定を具体的に進めるための時間・場所・詳細の質問や日程調整。（例:「何時くらいになりそう？」「どこ集合にする？」「どんな店？」）
+               - 案4 😄【俺流・ツッコミ共感】:
+                 親しい間柄でのクスッと笑えるツッコミ、または素直な労い・共感。（例:「それ笑うんだけど😂 さすがだわ」「今日もお疲れ！無理すんなよ」）
 
             出力は以下のJSON配列のみ（Markdownコードブロック不要）：
             [
-              {"label": "🎯 俺スタイル即答", "text": "（ユーザー本人の口調での直球返答）"},
-              {"label": "🤝 プロの転がし・傾聴", "text": "（相手の性格を受け止めて機嫌を取る返し）"},
-              {"label": "😄 俺流ツッコミ", "text": "（クスッと笑えるウィットなイジり）"},
-              {"label": "🚀 主導権提案", "text": "（生活圏を踏まえたスマートな提案）"}
+              {"label": "🎯 俺流・即答", "text": "（YES/了解の直球返答）"},
+              {"label": "🙅‍♂️ 俺流・代案", "text": "（NO/条件付き/別日提案）"},
+              {"label": "💬 俺流・質問調整", "text": "（時間・場所・詳細の質問）"},
+              {"label": "😄 俺流・ツッコミ共感", "text": "（クスッと笑えるツッコミや労い）"}
             ]
             """.trimIndent()
         }
@@ -286,50 +269,50 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             } else {
                 return if (shouldInvite) {
                     listOf(
-                        SmartReplyOption("🎯 俺スタイル即答", "あいてるよ！渋谷か恵比寿あたりなら行きやすいな🥩"),
-                        SmartReplyOption("🤝 プロの転がし", "いいじゃん！そういうこだわり持ってる人めっちゃ好き笑"),
-                        SmartReplyOption("😄 俺流ツッコミ", "急にわがまま発動してきたな笑 でも嫌いじゃない😂"),
-                        SmartReplyOption("📲 LINEへ移行", JA_LINE_INVITE)
+                        SmartReplyOption("🎯 俺流・即答", "あいてるよ！肉めっちゃ好き🥩 渋谷か恵比寿あたりなら行きやすいな"),
+                        SmartReplyOption("☕️ 俺流・共感質問", "それめっちゃわかる！普段どんな店によく行くの？😊"),
+                        SmartReplyOption("😄 俺流・ツッコミ", "行動力ありすぎて笑った😂 でもそういうノリ好きだわ笑"),
+                        SmartReplyOption("📲 LINE交換", JA_LINE_INVITE)
                     )
                 } else {
                     listOf(
-                        SmartReplyOption("🎯 俺スタイル即答", "それめっちゃわかる！俺もちょうどそれ食べたかったところ"),
-                        SmartReplyOption("🤝 プロの転がし", "プロフ見て気になってた！普段からよく行くの？😊"),
-                        SmartReplyOption("😄 俺流ツッコミ", "センス良すぎて笑う😂 もっと詳しく聞かせて！"),
-                        SmartReplyOption("🚀 主導権提案", "今度おすすめの店連れてってよ！予定合わせよ〜")
+                        SmartReplyOption("🎯 俺流・即答", "それめっちゃわかる！俺もちょうどそれ食べたかったところ"),
+                        SmartReplyOption("☕️ 俺流・共感質問", "プロフ見て気になってた！いつ頃からハマってるの？✨"),
+                        SmartReplyOption("😄 俺流・ツッコミ", "センス良すぎて笑う😂 もっと詳しく聞かせて！"),
+                        SmartReplyOption("🚀 爽やか提案", "もしよかったら今度サクッと美味しいご飯行こ！予定合わせよ〜")
                     )
                 }
             }
         }
 
-        // LINE context
+        // LINE context (Friends, Family, Everyday)
         if (context.isEnglishPartner) {
             return listOf(
-                SmartReplyOption("🎯 Direct Answer", "Sounds awesome! Count me in 👍"),
-                SmartReplyOption("🤝 Friendly Vibe", "Totally agree with you! How is everything going on your end? 😊"),
-                SmartReplyOption("😄 Witty / Fun", "Haha that made my day! You always have the best stories 😂"),
-                SmartReplyOption("🚀 Next Plan", "Let's definitely catch up soon! When are you free next? ✨")
+                SmartReplyOption("🎯 YES / Agree", "Sounds awesome! Count me in 👍"),
+                SmartReplyOption("🙅‍♂️ NO / Alternative", "Ah can't make it today, how about next week?"),
+                SmartReplyOption("💬 Question / Details", "What time were you thinking? Where should we meet?"),
+                SmartReplyOption("😄 Wit / Reaction", "Haha that made my day! You always have the best stories 😂")
             )
         }
 
         return when {
             latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
-                SmartReplyOption("🎯 俺スタイル即答", "19時くらいはどう？仕事終わりだからちょうど良さそう！"),
-                SmartReplyOption("🤝 プロの転がし", "合わせるよ！そっちは何時くらいが一番都合いい？😊"),
-                SmartReplyOption("😄 俺流ツッコミ", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻"),
-                SmartReplyOption("🚀 主導権提案", "金曜か土曜の夜ならいつでも空いてるよ！どっちがいい？")
+                SmartReplyOption("🎯 俺流・即答", "おけ！19時くらいはどう？仕事終わりちょうど良さそう！"),
+                SmartReplyOption("🙅‍♂️ 俺流・代案", "その日ちょっと先約あって厳しいわ！来週の平日どう？"),
+                SmartReplyOption("💬 俺流・質問調整", "何時くらいになりそう？そっちの都合いい時間に合わせるよ！"),
+                SmartReplyOption("😄 俺流・ツッコミ共感", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻")
             )
             latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
-                SmartReplyOption("🎯 俺スタイル即答", "渋谷か恵比寿あたりが行きやすくて助かる！"),
-                SmartReplyOption("🤝 プロの転がし", "そっちの行きやすいエリアに合わせるよ！どこら辺がいい？✨"),
-                SmartReplyOption("😄 俺流ツッコミ", "美味しいご飯があるならどこへでも飛んでくわ笑😋"),
-                SmartReplyOption("🚀 主導権提案", "気になってるお店いくつかあるからURL送るね！")
+                SmartReplyOption("🎯 俺流・即答", "渋谷か恵比寿あたりが行きやすくて助かる！"),
+                SmartReplyOption("🙅‍♂️ 俺流・代案", "そこ混んでそうなら、駅前の静かなとこにする？"),
+                SmartReplyOption("💬 俺流・質問調整", "そっちの行きやすいエリアどこら辺？何系食べたい？😋"),
+                SmartReplyOption("😄 俺流・ツッコミ共感", "美味い飯があるならどこへでも飛んでくわ笑")
             )
             else -> listOf(
-                SmartReplyOption("🎯 俺スタイル即答", "それめっちゃわかる！まさに同じこと思ってたところ"),
-                SmartReplyOption("🤝 プロの転がし", "いいじゃん！聞いてるだけで楽しそう😊"),
-                SmartReplyOption("😄 俺流ツッコミ", "それは笑うんだけど😂 さすがだわ！"),
-                SmartReplyOption("🚀 主導権提案", "また詳しく聞かせて！近いうちに飯でも行こ✨")
+                SmartReplyOption("🎯 俺流・即答", "おけ！了解〜！それでいこ👍"),
+                SmartReplyOption("🙅‍♂️ 俺流・代案", "今ちょっと立て込んでるから後でゆっくりLINEするわ！"),
+                SmartReplyOption("💬 俺流・質問調整", "それってどういうこと？もうちょい詳しく教えて！"),
+                SmartReplyOption("😄 俺流・ツッコミ共感", "それ笑うんだけど😂 さすがやな！今日もお疲れ！")
             )
         }
     }

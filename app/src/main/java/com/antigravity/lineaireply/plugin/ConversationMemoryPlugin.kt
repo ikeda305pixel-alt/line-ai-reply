@@ -39,8 +39,8 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
     companion object {
         const val TAG = "ConvMemoryPlugin"
-        const val MAX_ACCUMULATED_TURNS = 150
-        const val MAX_USER_SAMPLES = 60
+        const val MAX_ACCUMULATED_TURNS = 300
+        const val MAX_USER_SAMPLES = 120
 
         private const val KEY_USER_STYLE_SUMMARY = "user_style_summary"
         private const val KEY_USER_SAMPLES = "user_samples"

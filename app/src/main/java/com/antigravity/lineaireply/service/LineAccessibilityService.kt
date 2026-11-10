@@ -159,12 +159,12 @@ class LineAccessibilityService : AccessibilityService() {
                 memoryManager.recordScreenTurns(partnerName, initialTurns)
             }
 
-            // 2. Silently scroll up 2 times to capture previous readable history
-            for (step in 1..2) {
+            // 2. Silently scroll up 5 times (2.5x deeper) to capture previous readable history
+            for (step in 1..5) {
                 val scrollable = findScrollableNode(rootInActiveWindow)
                 val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) ?: false
                 if (!scrolled) break
-                kotlinx.coroutines.delay(200)
+                kotlinx.coroutines.delay(180)
                 val upRoot = rootInActiveWindow
                 if (upRoot != null) {
                     val upContext = ChatConversationExtractor.extract(
@@ -180,7 +180,7 @@ class LineAccessibilityService : AccessibilityService() {
             }
 
             // 3. Scroll back down to return to the bottom of the conversation
-            for (step in 1..2) {
+            for (step in 1..5) {
                 val scrollable = findScrollableNode(rootInActiveWindow)
                 val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ?: false
                 if (!scrolled) break
@@ -272,8 +272,8 @@ class LineAccessibilityService : AccessibilityService() {
             var partnerName = ""
             val metrics = resources.displayMetrics
 
-            // Scroll backwards (upwards) up to 12 times to harvest complete historical conversation
-            for (step in 1..12) {
+            // Scroll backwards (upwards) up to 24 times (2x deeper) to harvest complete historical conversation
+            for (step in 1..24) {
                 val root = rootInActiveWindow
                 if (root != null) {
                     val chatContext = ChatConversationExtractor.extract(
@@ -297,7 +297,7 @@ class LineAccessibilityService : AccessibilityService() {
                 if (!scrolled) {
                     break
                 }
-                kotlinx.coroutines.delay(350)
+                kotlinx.coroutines.delay(280)
             }
 
             if (allHarvestedTurns.isNotEmpty()) {
