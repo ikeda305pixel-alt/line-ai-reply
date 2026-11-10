@@ -121,7 +121,8 @@ class SmartOverlayManager(private val context: Context) {
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
         onQuickLineInvite: () -> Unit,
-        onDirectType: () -> Unit
+        onDirectType: () -> Unit,
+        onAutoScanHistory: (() -> Unit)? = null
     ) {
         if (cardView == null) {
             val inflater = LayoutInflater.from(context)
@@ -172,7 +173,7 @@ class SmartOverlayManager(private val context: Context) {
             val sb = StringBuilder()
             if (partnerMessage.isNotBlank()) {
                 val snippet = if (partnerMessage.length > 35) partnerMessage.take(35) + "…" else partnerMessage
-                sb.append("💬 相手: 「$snippet」")
+                sb.append("💬 相手（左）への回答: 「$snippet」")
             }
             if (profilePreview.isNotBlank()) {
                 if (sb.isNotEmpty()) sb.append("\n")
@@ -217,6 +218,18 @@ class SmartOverlayManager(private val context: Context) {
             }
         } else {
             btnQuickInvite.visibility = View.GONE
+        }
+
+        v.findViewById<View>(R.id.btnAutoScanHistory)?.let { btn ->
+            if (onAutoScanHistory != null) {
+                btn.visibility = View.VISIBLE
+                btn.setOnClickListener {
+                    hideReplies()
+                    onAutoScanHistory()
+                }
+            } else {
+                btn.visibility = View.GONE
+            }
         }
 
         v.findViewById<View>(R.id.btnClose).setOnClickListener {

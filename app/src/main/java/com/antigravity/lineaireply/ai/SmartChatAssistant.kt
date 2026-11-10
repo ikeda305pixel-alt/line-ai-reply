@@ -341,12 +341,14 @@ class SmartChatAssistant(
             【直近の対話ログ（時系列順：上から下へ）】
             $historyText
 
-            【相手の最新メッセージ】
+            【相手の最新メッセージ（★返信対象・左側チャット）】
             "${context.latestPartnerMessage}"
 
-            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ】\n\"${context.latestMyMessage}\"" else ""}
+            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ（右側・すでに送信済み）】\n\"${context.latestMyMessage}\"" else ""}
 
             【絶対厳守の返信生成ルール】
+            0. 【最重要：相手のメッセージ（左側）への返答】
+               返信案は【相手のチャット】に対する返答です。右側にある「あなたのメッセージ」に対して返信したり、自分の発言に相槌を打つことは【絶対に禁止】です。必ず相手の「${context.latestPartnerMessage}」に対して回答してください。
             1. 【コミュ力プロ × 俺テイストの融合】
                相手のわがまま・めんどくささ・チャラさを受け止め、プロの心理誘導で転がしつつ、喋り言葉は「俺が実際に送りそうなリアルな口調（語尾・テンポ・ツッコミ）」にしてください。優等生AIのような敬語や定型文は【完全禁止】です。
             2. 【プロフィール・生息エリアの自然な拾い上げ】
@@ -393,12 +395,14 @@ class SmartChatAssistant(
             【直近の会話履歴（時系列順：上から下へ）】
             $historyText
 
-            【直前の相手のメッセージ】
+            【直前の相手のメッセージ（★返信対象・左側チャット）】
             "${context.latestPartnerMessage}"
 
-            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ（もしあれば）】\n\"${context.latestMyMessage}\"" else ""}
+            ${if (context.latestMyMessage.isNotBlank()) "【直前のあなたのメッセージ（右側・すでに送信済み）】\n\"${context.latestMyMessage}\"" else ""}
 
             【絶対厳守の返信生成ルール】
+            0. 【最重要：相手のメッセージ（左側）への返答】
+               あなたの返信は【相手のチャット（左側）】に対する返答でなければなりません。右側にある「あなたのメッセージ」は自分がすでに送信済みの発言です。自分に対して返信したり、自分の言葉に相槌を打つような不自然な返信は【絶対に禁止】です。必ず相手の「${context.latestPartnerMessage}」に対して回答してください。
             1. 【コミュ力プロ × 俺テイストの融合】
                相手のわがまま・めんどくささ・チャラさを受け止め、プロの心理誘導で転がしつつ、喋り言葉は「俺が実際に送りそうなリアルな口調（語尾・テンポ・ツッコミ）」にしてください。優等生AIのような敬語や定型文は【完全禁止】です。
             2. 【生活圏・エリアを活かした提案】

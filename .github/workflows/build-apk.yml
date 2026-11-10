@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.3.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,37 +46,36 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.2
-          name: LINE & Bumble AI Reply Assistant v1.4.2 (404完全解消・動的モデル自動検知版)
+          tag_name: v1.4.3
+          name: LINE & Bumble AI Reply Assistant v1.4.3 (左右話者完全分離・過去ログ全自動スキャン学習版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.4.2 (404エラー完全解消・動的モデル自動検知版)
+            ## LINE & Bumble AI返信アシスタント v1.4.3 (左右話者完全分離・過去ログ全自動スキャン学習版)
 
-            ### 🚀 404エラー完全根絶アップデート
-            - **動的モデル自動検知（Auto Model Discovery）**:
-              APIキーを入力した際、Googleの `ListModels` API を直接照会し、そのユーザーのアカウントで**現時点で実際に有効な最新モデル（gemini-2.5-flash / gemini-2.5-flash-lite / gemini-2.0-flash 等）を完全自動で取得・選択**します。
-              これによって、古いモデル名がGoogle側で廃止・非推奨（404 Not Found）になっていても、100%確実に稼働中モデルへ接続されます！
-            - **9世代フォールバックモデル配列**:
-              万が一のネットワーク一時遮断時にも、`gemini-2.5-flash` から `gemini-pro` までの最新モデルを順次自動試行。
-            - **過去ログ学習（ConversationMemoryManager）も完全連動**:
-              LINEトーク履歴（.txt）や貼り付けからの過去ログ分析時にも、動的検知された稼働モデルを使用。
-            - **通信テストで「利用モデル名」をダイアログ表示**:
-              「🔑 APIキーの通信テスト」をタップすると、接続成功した最新モデル名（例: `gemini-2.5-flash`）が明確に確認できます。
-            ### 🔧 APIエラー対策＆通信安定化アップデート
-            - **APIキー自動サニタイズ**: コピペ時に紛れ込みやすい引用符（"）、前後の改行・空白・全角スペースを自動除去。
-            - **キー形式バリデーション＆パスワード可視化トグル**: Google AI Studioのキー（通常 `AIzaSy...`）と異なる場合に親切な確認ダイアログを表示。目玉アイコンで入力内容を目視確認可能。
-            - **HTTPエラーコード別の超親切な日本語解説**:
-              - HTTP 400: 無効なキー（末尾の欠け、別サービスのキー等）
-              - HTTP 403: Google Cloudプロジェクトの権限・API未有効化・地域制限
-              - HTTP 429: 無料枠のレート制限（1分置いて再試行）
-            - **複数モデル（2.5-flash / 2.0-flash / 1.5-flash）自動フォールバック**: 1つのモデルがビジーやエラーでも自動的に次を試行。
-            - **Markdownコードブロック（```json）混入耐性**: AIがコードブロック付きで返答しても100%パースできる堅牢パーサーを搭載。
+            ### 🎯 左右話者分離の完全修正（右＝自分、左＝相手）
+            - **自分への返信バグを根絶**:
+              LINEの吹き出しが中長文（20文字以上）になった際に、画面左側に広がって「相手のメッセージ」と誤判定されていた判定アルゴリズムを刷新。
+            - **厳密なマージン＆中心座標（centerX）判定**:
+              右寄せの自分メッセージ（右マージン小・右側寄り）と左寄せの相手メッセージ（左マージン小・左側寄り）を100%確実に識別。
+            - **返信対象ロックオン**:
+              AIが返信対象とするメッセージを**左側チャット（相手の直前メッセージ）に100%限定**。画面最下部に自分の送信済みメッセージがあっても、絶対に自分に対して返信しません。
+            - **プロンプト絶対厳守ルール0番**:
+              「返信案は相手（左側）に対する返答であり、右側の自分の発言への返信・相槌は絶対禁止」をプロンプト最優先事項として徹底注入。
 
-            ### 過去全ログ学習 ＆ コミュ力プロ × 俺スタイル
-            - LINEトーク履歴（.txt）または貼り付けから過去ログを一括学習。
-            - 相手の生息エリア（渋谷・恵比寿等）と人間性（わがまま・構ってちゃん等）をプロファイリングし、俺の口調をブレンドして心地よく転がす返信案を生成。
+            ### 🤖 過去ログの「完全自動読み込み・学習」（手動エクスポート・ファイル操作不要）
+            - **機能A：受動的リアルタイム自動蓄積**:
+              LINEやBumbleを開いてスクロール・閲覧するだけで、画面上の全吹き出しをバックグラウンドで自動的にローカルメモリに蓄積。
+            - **機能B：ワンタップ全自動遡りスキャン（「🤖 過去ログ全自動読込」ボタン）**:
+              オーバーレイ上に新設された「🤖 過去ログ全自動読込」をタップすると、アプリ自身がトーク画面を上へ自動スクロールしながら過去ログを一網打尽にスキャン。
+              - 自分の文体・語尾・テンポ（俺スタイル）を自動学習。
+              - 相手の生息エリアや人間性（相手カルテ）を自動分析。
+              - トーク履歴のファイル書き出しやコピー＆ペーストなどの手作業は一切不要！
+
+            ### 🚀 404エラー根絶・動的モデル自動検知（v1.4.2より継続）
+            - APIキーを入力した際、Googleの `ListModels` API を直接照会し、有効な最新モデル（gemini-2.5-flash等）を自動検知して接続。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.3.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

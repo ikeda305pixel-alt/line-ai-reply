@@ -71,7 +71,14 @@ class LineAccessibilityService : AccessibilityService() {
                 handleBubbleClicked(platform, pkg)
             }
 
-            // Also trigger if user taps directly on a message bubble in chat
+            // Passive continuous background harvesting as user scrolls or chats
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            ) {
+                harvestCurrentScreenAsync(pkg)
+            }
+
+            // Also trigger if user taps directly on a message bubble in chat (strictly partner side)
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val source = event.source
                 val clickedText = source?.text?.toString()?.trim() ?: ""
@@ -89,6 +96,28 @@ class LineAccessibilityService : AccessibilityService() {
         } else {
             // User switched to another app (Home, Chrome, etc.)
             overlayManager.hideAll()
+        }
+    }
+
+    private var lastHarvestTime = 0L
+    private fun harvestCurrentScreenAsync(pkg: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastHarvestTime < 1000) return
+        lastHarvestTime = now
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val root = rootInActiveWindow ?: return@launch
+                val metrics = resources.displayMetrics
+                val chatContext = ChatConversationExtractor.extract(
+                    root, pkg, metrics.widthPixels, metrics.heightPixels
+                )
+                if (chatContext != null && chatContext.conversationHistory.isNotEmpty()) {
+                    memoryManager.recordScreenTurns(chatContext.partnerName, chatContext.conversationHistory)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Harvest failed: ${e.message}")
+            }
         }
     }
 
@@ -120,6 +149,76 @@ class LineAccessibilityService : AccessibilityService() {
                 userMessageCount = 0
             )
             triggerReplySuggestions(fallbackContext)
+        }
+    }
+
+    private fun findScrollableNode(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            if (node.isScrollable) {
+                return node
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { queue.add(it) }
+            }
+        }
+        return null
+    }
+
+    private fun autoScanAndLearnAllHistory(pkg: String) {
+        serviceScope.launch(Dispatchers.Main) {
+            Toast.makeText(this@LineAccessibilityService, "🤖 過去ログを上へ自動スクロールして読み込み中...", Toast.LENGTH_SHORT).show()
+            val allHarvestedTurns = mutableListOf<MessageTurn>()
+            var partnerName = ""
+            val metrics = resources.displayMetrics
+
+            // Scroll backwards (upwards) 10 times to harvest historical conversation
+            for (step in 1..10) {
+                val root = rootInActiveWindow
+                if (root != null) {
+                    val chatContext = ChatConversationExtractor.extract(
+                        root, pkg, metrics.widthPixels, metrics.heightPixels
+                    )
+                    if (chatContext != null) {
+                        if (partnerName.isEmpty() && chatContext.partnerName.isNotBlank()) {
+                            partnerName = chatContext.partnerName
+                        }
+                        for (turn in chatContext.conversationHistory) {
+                            if (!allHarvestedTurns.any { it.text == turn.text }) {
+                                allHarvestedTurns.add(turn)
+                            }
+                        }
+                    }
+                }
+
+                val currentScroll = findScrollableNode(rootInActiveWindow)
+                val scrolled = currentScroll?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) ?: false
+                if (!scrolled) {
+                    break
+                }
+                kotlinx.coroutines.delay(400)
+            }
+
+            if (allHarvestedTurns.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    memoryManager.recordScreenTurns(partnerName, allHarvestedTurns)
+                    val key = prefs.getString("gemini_key", "") ?: ""
+                    val rawPastedText = allHarvestedTurns.joinToString("\n") {
+                        "${if (it.isPartner) (partnerName.ifEmpty { "相手" }) else "自分"}: ${it.text}"
+                    }
+                    memoryManager.importAndLearnLog(rawPastedText, key, partnerName)
+                }
+                Toast.makeText(
+                    this@LineAccessibilityService,
+                    "✅ 過去ログ ${allHarvestedTurns.size}件を完全自動学習しました！（俺スタイル＆相手プロファイルを更新）",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(this@LineAccessibilityService, "⚠️ メッセージを検出できませんでした。トーク画面でお試しください。", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -184,6 +283,9 @@ class LineAccessibilityService : AccessibilityService() {
                 },
                 onDirectType = {
                     chatContext.inputNode?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                },
+                onAutoScanHistory = {
+                    autoScanAndLearnAllHistory(if (isBumble) PKG_BUMBLE else PKG_LINE)
                 }
             )
         }

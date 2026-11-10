@@ -121,25 +121,36 @@ object ChatConversationExtractor {
         // Sort chronologically by vertical screen position (top to bottom)
         val sortedNodes = deduplicated.sortedBy { it.rect.top }
 
-        // Classify speaker based on screen layout:
-        // Left side (rect.left < width * 0.40) = 相手 (Partner)
-        // Right side (rect.right > width * 0.60) = 自分 (Me)
+        // Classify speaker strictly based on screen layout:
+        // In LINE and Bumble:
+        // - Right side (自分/Me): Right margin is small (< 15% width), left margin is large (> 15% width), centerX is on the right (> 45% width).
+        // - Left side (相手/Partner): Left margin is small (< 25% width, next to avatar), right margin is large (> 15% width), centerX is on the left (< 55% width).
         val messageTurns = mutableListOf<MessageTurn>()
         for (node in sortedNodes) {
             val rect = node.rect
             val text = node.text
 
-            // Ignore centered dates or system notices
-            val isCentered = rect.left > effectiveWidth * 0.25 && rect.right < effectiveWidth * 0.75
-            if (isCentered && (DATE_REGEX.matches(text) || text.length < 15)) {
+            // Ignore centered dates, timestamps, or system notices
+            val isCentered = rect.left > effectiveWidth * 0.20 && rect.right < effectiveWidth * 0.80 &&
+                    (rect.centerX() > effectiveWidth * 0.40 && rect.centerX() < effectiveWidth * 0.60)
+            if (isCentered && (DATE_REGEX.matches(text) || text.length < 12 || isSystemLabel(text))) {
                 continue
             }
 
-            val isPartner = when {
-                rect.left < effectiveWidth * 0.40 -> true
-                rect.right > effectiveWidth * 0.60 -> false
-                else -> rect.centerX() < effectiveWidth / 2
-            }
+            val rightMargin = effectiveWidth - rect.right
+            val leftMargin = rect.left
+            val centerX = rect.centerX()
+
+            // Is this the user's own sent message (Right side)?
+            // A message is right-aligned (Me) if:
+            // 1. rightMargin is significantly smaller than leftMargin, OR
+            // 2. centerX > 55% of screen width, OR
+            // 3. rightMargin < 12% of screen width (flush against the right edge).
+            val isMe = (rightMargin < leftMargin && centerX > effectiveWidth * 0.45) ||
+                       (rightMargin < effectiveWidth * 0.12) ||
+                       (centerX > effectiveWidth * 0.58)
+
+            val isPartner = !isMe
 
             messageTurns.add(
                 MessageTurn(
@@ -158,7 +169,10 @@ object ChatConversationExtractor {
         val partnerTurns = messageTurns.filter { it.isPartner }
         val myTurns = messageTurns.filter { !it.isPartner }
 
-        val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: messageTurns.last().text
+        // STRICT TARGETING:
+        // The reply MUST answer the partner's chat (Left side), NEVER the user's own message (Right side)!
+        // If partnerTurns exists, strictly use partnerTurns.last().
+        val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: messageTurns.firstOrNull { it.isPartner }?.text ?: ""
         val latestMyMessage = myTurns.lastOrNull()?.text ?: ""
 
         val combinedSample = (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
