@@ -118,6 +118,7 @@ class SmartOverlayManager(private val context: Context) {
         profilePreview: String = "",
         options: List<SmartReplyOption>,
         showQuickInviteButton: Boolean = false,
+        accumulatedTurnsCount: Int = 0,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
         onQuickLineInvite: () -> Unit,
@@ -221,14 +222,27 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         v.findViewById<View>(R.id.btnAutoScanHistory)?.let { btn ->
-            if (onAutoScanHistory != null) {
-                btn.visibility = View.VISIBLE
-                btn.setOnClickListener {
-                    hideReplies()
+            btn.visibility = View.VISIBLE
+            val badgeText = if (accumulatedTurnsCount > 0) {
+                "✅ ログ自動蓄積: ${accumulatedTurnsCount}件"
+            } else {
+                "✅ ログ全自動蓄積中"
+            }
+            if (btn is Button) {
+                btn.text = badgeText
+            } else if (btn is TextView) {
+                btn.text = badgeText
+            }
+            btn.setOnClickListener {
+                val msg = if (accumulatedTurnsCount > 0) {
+                    "✅ この相手との過去全ログ（${accumulatedTurnsCount}件）を完全自動蓄積済みです。AIが全履歴を把握して返信しています。"
+                } else {
+                    "✅ 画面のやり取りを自動で蓄積・学習しています。"
+                }
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                if (onAutoScanHistory != null) {
                     onAutoScanHistory()
                 }
-            } else {
-                btn.visibility = View.GONE
             }
         }
 

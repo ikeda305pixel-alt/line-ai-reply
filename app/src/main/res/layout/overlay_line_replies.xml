@@ -156,8 +156,8 @@
             android:layout_height="wrap_content"
             android:minWidth="0dp"
             android:paddingHorizontal="6dp"
-            android:text="🤖 過去ログ全自動読込"
-            android:textColor="#2563EB"
+            android:text="✅ 過去ログ自動蓄積済"
+            android:textColor="#059669"
             android:textSize="11sp" />
 
         <Button

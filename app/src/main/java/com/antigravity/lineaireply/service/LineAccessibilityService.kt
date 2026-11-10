@@ -19,6 +19,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Autonomous Accessibility Service for LINE and Bumble.
+ * Architecture:
+ * - Completely zero-click background conversation harvesting (triggered on window state, scroll, and content changes).
+ * - Multi-turn partner memory persistence via [ConversationMemoryManager].
+ * - Full chronological conversation history injection into AI reply generation.
+ * - Non-intrusive floating trigger bubble and high-EQ suggestion overlay.
+ */
 class LineAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
@@ -75,8 +83,10 @@ class LineAccessibilityService : AccessibilityService() {
                 handleBubbleClicked(platform, pkg)
             }
 
-            // Passive continuous background harvesting as user scrolls or chats
-            if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+            // Autonomous zero-click continuous background harvesting:
+            // Triggers whenever chat is opened, scrolled, or updated
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
                 event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             ) {
                 harvestCurrentScreenAsync(pkg)
@@ -106,7 +116,7 @@ class LineAccessibilityService : AccessibilityService() {
     private var lastHarvestTime = 0L
     private fun harvestCurrentScreenAsync(pkg: String) {
         val now = System.currentTimeMillis()
-        if (now - lastHarvestTime < 1000) return
+        if (now - lastHarvestTime < 400) return
         lastHarvestTime = now
 
         serviceScope.launch(Dispatchers.IO) {
@@ -116,11 +126,14 @@ class LineAccessibilityService : AccessibilityService() {
                 val chatContext = ChatConversationExtractor.extract(
                     root, pkg, metrics.widthPixels, metrics.heightPixels
                 )
-                if (chatContext != null && chatContext.conversationHistory.isNotEmpty()) {
-                    memoryManager.recordScreenTurns(chatContext.partnerName, chatContext.conversationHistory)
+                if (chatContext != null) {
+                    val turnsToRecord = chatContext.allMessageTurns.ifEmpty { chatContext.conversationHistory }
+                    if (turnsToRecord.isNotEmpty()) {
+                        memoryManager.recordScreenTurns(chatContext.partnerName, turnsToRecord)
+                    }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Harvest failed: ${e.message}")
+                Log.w(TAG, "Autonomous harvest failed: ${e.message}")
             }
         }
     }
@@ -133,6 +146,10 @@ class LineAccessibilityService : AccessibilityService() {
         )
 
         if (chatContext != null) {
+            val turns = chatContext.allMessageTurns.ifEmpty { chatContext.conversationHistory }
+            if (turns.isNotEmpty()) {
+                memoryManager.recordScreenTurns(chatContext.partnerName, turns)
+            }
             triggerReplySuggestions(chatContext)
         } else {
             val fallbackContext = ChatContext(
@@ -174,7 +191,7 @@ class LineAccessibilityService : AccessibilityService() {
 
     private fun autoScanAndLearnAllHistory(pkg: String) {
         serviceScope.launch(Dispatchers.Main) {
-            Toast.makeText(this@LineAccessibilityService, "🤖 過去ログを上へ自動スクロールして読み込み中...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@LineAccessibilityService, "🤖 過去ログを遡り自動同期中...", Toast.LENGTH_SHORT).show()
             val allHarvestedTurns = mutableListOf<MessageTurn>()
             var partnerName = ""
             val metrics = resources.displayMetrics
@@ -217,9 +234,10 @@ class LineAccessibilityService : AccessibilityService() {
                     }
                     memoryManager.importAndLearnLog(rawPastedText, key, partnerName)
                 }
+                val totalCount = memoryManager.getAccumulatedTurnCount(partnerName)
                 Toast.makeText(
                     this@LineAccessibilityService,
-                    "✅ 過去ログ ${allHarvestedTurns.size}件を完全自動学習しました！（俺スタイル＆相手プロファイルを更新）",
+                    "✅ 過去ログ全${totalCount}件を完全同期しました！（AIが全履歴を把握して返信します）",
                     Toast.LENGTH_LONG
                 ).show()
             } else {
@@ -240,8 +258,12 @@ class LineAccessibilityService : AccessibilityService() {
         assistant.updateApiKey(key)
 
         // Harvest on-screen messages into long-term memory
-        memoryManager.recordScreenTurns(chatContext.partnerName, chatContext.conversationHistory)
+        val turns = chatContext.allMessageTurns.ifEmpty { chatContext.conversationHistory }
+        if (turns.isNotEmpty()) {
+            memoryManager.recordScreenTurns(chatContext.partnerName, turns)
+        }
 
+        val accumulatedCount = memoryManager.getAccumulatedTurnCount(chatContext.partnerName)
         val partnerDossier = memoryManager.getPartnerDossier(chatContext.partnerName)
 
         serviceScope.launch {
@@ -250,7 +272,8 @@ class LineAccessibilityService : AccessibilityService() {
             val summary = if (isBumble) {
                 val profileTag = if (chatContext.profileSnippet.isNotBlank()) " 👤プロフ有" else ""
                 val langTag = if (chatContext.isEnglishPartner) " 🌐${chatContext.languageDesc}" else ""
-                val rallyPrefix = "ラリー${chatContext.rallyCount}回目$profileTag$langTag [${result.engine}]"
+                val historyTag = if (accumulatedCount > 0) " 📚${accumulatedCount}件蓄積" else ""
+                val rallyPrefix = "ラリー${chatContext.rallyCount}回目$profileTag$langTag$historyTag [${result.engine}]"
                 if (willInvite) {
                     if (chatContext.isEnglishPartner) "$rallyPrefix Ready for LINE! 🔥"
                     else "$rallyPrefix LINE交換チャンス！🔥"
@@ -260,7 +283,8 @@ class LineAccessibilityService : AccessibilityService() {
             } else {
                 val langTag = if (chatContext.isEnglishPartner) " 🌐${chatContext.languageDesc}" else ""
                 val personaTag = if (partnerDossier.personalityType.isNotBlank() && partnerDossier.personalityType != "感情表現豊か・リアクション重視") " [${partnerDossier.personalityType}]" else ""
-                "LINE: 俺流×プロ$personaTag$langTag [${result.engine}]"
+                val historyTag = if (accumulatedCount > 0) " 📚${accumulatedCount}件蓄積" else ""
+                "LINE: 俺流×プロ$personaTag$langTag$historyTag [${result.engine}]"
             }
 
             val profilePreview = if (chatContext.profileSnippet.isNotBlank()) {
@@ -278,6 +302,7 @@ class LineAccessibilityService : AccessibilityService() {
                 profilePreview = profilePreview,
                 options = result.options,
                 showQuickInviteButton = isBumble && !willInvite,
+                accumulatedTurnsCount = accumulatedCount,
                 onSelect = { selectedText ->
                     overlayManager.insertTextIntoInput(chatContext.inputNode, selectedText)
                 },

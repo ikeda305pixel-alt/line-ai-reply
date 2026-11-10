@@ -3,6 +3,8 @@ package com.antigravity.lineaireply.ai
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 
+import com.antigravity.lineaireply.plugin.IConversationHarvesterPlugin
+
 data class MessageTurn(
     val speaker: String, // "相手" or "自分"
     val text: String,
@@ -35,7 +37,7 @@ data class ChatContext(
  * - Multi-language and foreigner detection (English, bilingual, Japanese).
  * - Partner name extraction from screen header.
  */
-object ChatConversationExtractor {
+object ChatConversationExtractor : IConversationHarvesterPlugin {
 
     const val PKG_LINE = "jp.naver.line.android"
     const val PKG_BUMBLE = "com.bumble.app"
