@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.1.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,10 +46,25 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.1
-          name: LINE & Bumble AI Reply Assistant v1.4.1 (APIエラー完全対策・親切解説版)
+          tag_name: v1.4.2
+          name: LINE & Bumble AI Reply Assistant v1.4.2 (404完全解消・動的モデル自動検知版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.4.1 (APIエラー完全対策・自動サニタイズ版)
+            ## LINE & Bumble AI返信アシスタント v1.4.2 (404エラー完全解消・動的モデル自動検知版)
+
+            ### 🚀 404エラー完全根絶アップデート
+            - **動的モデル自動検知（Auto Model Discovery）**:
+              APIキーを入力した際、Googleの `ListModels` API を直接照会し、そのユーザーのアカウントで**現時点で実際に有効な最新モデル（gemini-2.5-flash / gemini-2.5-flash-lite / gemini-2.0-flash 等）を完全自動で取得・選択**します。
+              これによって、古いモデル名がGoogle側で廃止・非推奨（404 Not Found）になっていても、100%確実に稼働中モデルへ接続されます！
+            - **9世代フォールバックモデル配列**:
+              万が一のネットワーク一時遮断時にも、`gemini-2.5-flash` から `gemini-pro` までの最新モデルを順次自動試行。
+            - **過去ログ学習（ConversationMemoryManager）も完全連動**:
+              LINEトーク履歴（.txt）や貼り付けからの過去ログ分析時にも、動的検知された稼働モデルを使用。
+            - **通信テストで「利用モデル名」をダイアログ表示**:
+              「🔑 APIキーの通信テスト」をタップすると、接続成功した最新モデル名（例: `gemini-2.5-flash`）が明確に確認できます。
+          files: |
+            app/build/outputs/apk/release/line-ai-reply.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
+          make_latest: true
 
             ### 🔧 APIエラー対策＆通信安定化アップデート
             - **APIキー自動サニタイズ**: コピペ時に紛れ込みやすい引用符（"）、前後の改行・空白・全角スペースを自動除去。

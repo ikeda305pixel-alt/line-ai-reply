@@ -257,22 +257,43 @@ class ConversationMemoryManager(private val context: Context) {
                     .build()
 
                 val cleanKey = SmartChatAssistant.sanitizeApiKey(apiKey)
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$cleanKey"
-                val body = JSONObject().apply {
-                    val parts = JSONArray().put(JSONObject().put("text", prompt))
-                    put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-                    put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+                val modelsToTry = if (SmartChatAssistant.cachedWorkingModel != null) {
+                    listOf(SmartChatAssistant.cachedWorkingModel!!) + SmartChatAssistant.FALLBACK_CANDIDATE_MODELS
+                } else {
+                    SmartChatAssistant.FALLBACK_CANDIDATE_MODELS
+                }.distinct()
+
+                var respStr = ""
+                var isSuccessful = false
+
+                for (rawModel in modelsToTry) {
+                    val model = rawModel.removePrefix("models/")
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
+                    val body = JSONObject().apply {
+                        val parts = JSONArray().put(JSONObject().put("text", prompt))
+                        put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+                        put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+                    }
+
+                    val req = Request.Builder()
+                        .url(endpoint)
+                        .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        .build()
+
+                    try {
+                        val resp = client.newCall(req).execute()
+                        if (resp.isSuccessful) {
+                            respStr = resp.body?.string() ?: ""
+                            isSuccessful = true
+                            SmartChatAssistant.cachedWorkingModel = model
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Analysis model $model failed: ${e.message}")
+                    }
                 }
 
-                val req = Request.Builder()
-                    .url(endpoint)
-                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-                    .build()
-
-                val resp = client.newCall(req).execute()
-                val respStr = resp.body?.string() ?: ""
-
-                if (resp.isSuccessful) {
+                if (isSuccessful && respStr.isNotBlank()) {
                     val root = JSONObject(respStr)
                     val candidates = root.optJSONArray("candidates")
                     val contentObj = candidates?.optJSONObject(0)?.optJSONObject("content")

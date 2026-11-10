@@ -119,21 +119,107 @@ class SmartChatAssistant(
             return list
         }
 
+        val FALLBACK_CANDIDATE_MODELS = listOf(
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash-8b",
+            "gemini-1.5-pro",
+            "gemini-pro"
+        )
+
+        @Volatile
+        var cachedWorkingModel: String? = null
+
+        /**
+         * Dynamically queries the Gemini API for supported models that have "generateContent".
+         * Sorts prioritizing 2.5-flash, 2.0-flash, flash-lite, then 1.5-flash.
+         */
+        suspend fun fetchAvailableModels(key: String): List<String> = withContext(Dispatchers.IO) {
+            val cleanKey = sanitizeApiKey(key)
+            if (cleanKey.isBlank()) return@withContext emptyList()
+            try {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(6, TimeUnit.SECONDS)
+                    .readTimeout(8, TimeUnit.SECONDS)
+                    .build()
+                val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey"
+                val req = Request.Builder().url(url).get().build()
+                val resp = client.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val root = JSONObject(body)
+                    val modelsArray = root.optJSONArray("models") ?: return@withContext emptyList()
+                    val result = mutableListOf<String>()
+                    for (i in 0 until modelsArray.length()) {
+                        val mObj = modelsArray.getJSONObject(i)
+                        val name = mObj.optString("name", "").removePrefix("models/")
+                        val methods = mObj.optJSONArray("supportedGenerationMethods")
+                        var canGenerate = false
+                        if (methods != null) {
+                            for (j in 0 until methods.length()) {
+                                if (methods.getString(j).equals("generateContent", ignoreCase = true)) {
+                                    canGenerate = true
+                                    break
+                                }
+                            }
+                        }
+                        if (canGenerate && name.isNotBlank()) {
+                            result.add(name)
+                        }
+                    }
+
+                    // Sort: prioritize 2.5-flash > 2.0-flash > flash-lite > 1.5-flash > flash > pro
+                    result.sortWith { a, b ->
+                        fun score(m: String): Int = when {
+                            m.contains("2.5-flash") && !m.contains("lite") -> 100
+                            m.contains("2.0-flash") -> 90
+                            m.contains("2.5-flash-lite") -> 85
+                            m.contains("flash-lite") -> 80
+                            m.contains("1.5-flash") -> 70
+                            m.contains("flash") -> 60
+                            m.contains("pro") -> 50
+                            else -> 10
+                        }
+                        score(b) - score(a)
+                    }
+                    if (result.isNotEmpty()) {
+                        Log.i(TAG, "Discovered active models: ${result.take(4)}")
+                    }
+                    return@withContext result
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "ListModels call failed: ${e.message}")
+            }
+            emptyList()
+        }
+
         suspend fun testApiKey(rawKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
             val key = sanitizeApiKey(rawKey)
             if (key.isBlank()) return@withContext Pair(false, "APIキーが入力されていません。")
-
-            val modelsToTry = listOf("gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash")
-            var lastError = ""
 
             val testClient = OkHttpClient.Builder()
                 .connectTimeout(8, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            for (model in modelsToTry) {
+            // 1. Dynamic model discovery from API
+            val discovered = fetchAvailableModels(key)
+            val modelsToTry = if (discovered.isNotEmpty()) {
+                (discovered.take(5) + FALLBACK_CANDIDATE_MODELS).distinct()
+            } else {
+                FALLBACK_CANDIDATE_MODELS
+            }
+
+            var lastError = ""
+
+            for (rawModel in modelsToTry) {
+                val cleanModel = rawModel.removePrefix("models/")
                 try {
-                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key"
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$key"
                     val body = JSONObject().apply {
                         val parts = JSONArray().put(JSONObject().put("text", "Say OK"))
                         put("contents", JSONArray().put(JSONObject().put("parts", parts)))
@@ -148,12 +234,16 @@ class SmartChatAssistant(
                     val respBody = resp.body?.string() ?: ""
 
                     if (resp.isSuccessful) {
-                        return@withContext Pair(true, "✅ Gemini ($model) との通信に成功しました！(HTTP $code)")
+                        cachedWorkingModel = cleanModel
+                        return@withContext Pair(
+                            true,
+                            "✅ Gemini API通信成功！(HTTP $code)\n\n【利用モデル】$cleanModel\n\n最新モデルとの接続が確認できました。LINEおよびBumbleで高精度なAI返信が利用可能です。"
+                        )
                     } else {
                         val friendlyMsg = when (code) {
                             400 -> "HTTP 400 (無効なAPIキー)\n・APIキーが間違っているか、末尾が欠けている可能性があります。\n・Google AI Studio (aistudio.google.com) で作成したキー（通常 'AIzaSy' から始まる文字列）をご確認ください。"
                             403 -> "HTTP 403 (権限・地域エラー)\n・Google CloudのGenerative Language APIが有効化されていないか、制限地域またはプロジェクトの権限設定をご確認ください。"
-                            404 -> "HTTP 404 (モデル未検出: $model)"
+                            404 -> "HTTP 404 (モデル $cleanModel 未検出)"
                             429 -> "HTTP 429 (利用枠上限・レート制限)\n・Gemini APIの無料枠制限に達しました。1分ほど置いて再試行してください。"
                             else -> "HTTP $code エラー: $respBody"
                         }
@@ -331,11 +421,17 @@ class SmartChatAssistant(
             """.trimIndent()
         }
 
-        // Try primary model (gemini-1.5-flash), then gemini-1.5-flash-latest, then fallback model (gemini-2.0-flash)
-        val models = listOf("gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash")
+        val discoveredModels = if (cachedWorkingModel != null) {
+            listOf(cachedWorkingModel!!) + FALLBACK_CANDIDATE_MODELS
+        } else {
+            val fetched = fetchAvailableModels(currentKey)
+            if (fetched.isNotEmpty()) (fetched + FALLBACK_CANDIDATE_MODELS) else FALLBACK_CANDIDATE_MODELS
+        }.distinct()
+
         var lastError = ""
 
-        for (model in models) {
+        for (rawModel in discoveredModels) {
+            val model = rawModel.removePrefix("models/")
             try {
                 val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$currentKey"
                 val body = JSONObject().apply {
@@ -388,6 +484,7 @@ class SmartChatAssistant(
                 val list = parseRepliesFromJson(outputText)
 
                 if (list.isNotEmpty()) {
+                    cachedWorkingModel = model
                     return@withContext GenerationResult(
                         options = list,
                         engine = "Gemini (${model})",
