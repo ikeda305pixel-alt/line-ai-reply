@@ -65,7 +65,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
     // Cached profile across views in Bumble
     private var cachedBumbleProfile: String = ""
 
-    fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?) {
+    override fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?) {
         if (rootNode == null) return
         val profileList = mutableListOf<String>()
         scanForProfileTexts(rootNode, profileList)
@@ -75,11 +75,11 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         }
     }
 
-    fun extract(
+    override fun extract(
         rootNode: AccessibilityNodeInfo?,
         packageName: String,
-        screenWidth: Int = 1080,
-        screenHeight: Int = 2400
+        screenWidth: Int,
+        screenHeight: Int
     ): ChatContext? {
         if (rootNode == null) return null
 
@@ -198,7 +198,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         )
     }
 
-    fun detectLanguageBackground(sample: String, profileText: String): Pair<Boolean, String> {
+    override fun detectLanguageBackground(sample: String, profileText: String): Pair<Boolean, String> {
         val combined = "$sample $profileText".trim()
         if (combined.isEmpty()) return Pair(false, "日本語")
 

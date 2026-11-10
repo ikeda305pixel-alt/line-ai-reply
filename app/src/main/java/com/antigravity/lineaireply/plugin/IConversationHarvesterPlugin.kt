@@ -15,8 +15,8 @@ interface IConversationHarvesterPlugin {
     fun extract(
         rootNode: AccessibilityNodeInfo?,
         packageName: String,
-        screenWidth: Int,
-        screenHeight: Int
+        screenWidth: Int = 1080,
+        screenHeight: Int = 2400
     ): ChatContext?
 
     fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?)
