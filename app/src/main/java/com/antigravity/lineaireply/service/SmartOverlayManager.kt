@@ -27,7 +27,7 @@ class SmartOverlayManager(private val context: Context) {
     // Reply Options Card
     private var cardView: View? = null
 
-    fun showBubble(platform: String, onClick: () -> Unit) {
+    fun showBubble(platform: String, onClick: () -> Unit, onClose: (() -> Unit)? = null) {
         if (bubbleView != null) return
 
         val inflater = LayoutInflater.from(context)
@@ -54,10 +54,16 @@ class SmartOverlayManager(private val context: Context) {
 
         bubbleParams = params
         bubbleView = view
+        view.alpha = 0.82f
 
         val bubbleIcon = view.findViewById<TextView>(R.id.bubbleIcon)
         if (platform == "Bumble") {
             bubbleIcon.setBackgroundColor(Color.parseColor("#FFC629"))
+        }
+
+        view.findViewById<View>(R.id.btnBubbleClose)?.setOnClickListener {
+            hideBubble()
+            onClose?.invoke()
         }
 
         var initialX = 0
@@ -66,9 +72,10 @@ class SmartOverlayManager(private val context: Context) {
         var touchDownY = 0f
         var isClick = false
 
-        view.setOnTouchListener { _, event ->
+        bubbleIcon.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    view.alpha = 1.0f
                     initialX = params.x
                     initialY = params.y
                     touchDownX = event.rawX
@@ -88,6 +95,7 @@ class SmartOverlayManager(private val context: Context) {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    view.alpha = 0.82f
                     if (isClick) {
                         onClick()
                     }

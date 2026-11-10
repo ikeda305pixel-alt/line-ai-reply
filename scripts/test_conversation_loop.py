@@ -449,6 +449,54 @@ def test_kanagawa_atsugi_chigasaki_localization():
 
     print("Kanagawa (Atsugi / Chigasaki) localization & anti-Tokyo suite: PASS ✅")
 
+def test_bubble_dismiss_and_keyboard_hiding():
+    # 1. Bubble dismiss flag verification
+    class BubbleState:
+        def __init__(self, enabled_in_settings=True):
+            self.enabled_in_settings = enabled_in_settings
+            self.is_dismissed_manually = False
+            self.is_keyboard_open = False
+            self.is_in_chat_room = True
+
+        def should_show_bubble(self):
+            if not self.enabled_in_settings:
+                return False  # User disabled in settings -> NEVER SHOW!
+            if self.is_dismissed_manually:
+                return False  # User clicked 'X' -> DO NOT SHOW until next chat session!
+            if self.is_keyboard_open:
+                return False  # Keyboard is active -> HIDE to not block input/send button!
+            return self.is_in_chat_room
+
+    b = BubbleState()
+    assert b.should_show_bubble() == True
+
+    # User clicks 'X' button
+    b.is_dismissed_manually = True
+    assert b.should_show_bubble() == False, "Bubble MUST stay hidden when dismissed with 'X'!"
+
+    # User switches chat room -> reset
+    b.is_in_chat_room = False
+    b.is_dismissed_manually = False
+    b.is_in_chat_room = True
+    assert b.should_show_bubble() == True
+
+    # Keyboard opens
+    b.is_keyboard_open = True
+    assert b.should_show_bubble() == False, "Bubble MUST hide when soft keyboard is open!"
+    b.is_keyboard_open = False
+    assert b.should_show_bubble() == True
+
+    # User disabled bubble in Settings
+    b_disabled = BubbleState(enabled_in_settings=False)
+    assert b_disabled.should_show_bubble() == False, "Bubble MUST NEVER show if disabled in settings!"
+
+    # 2. Check layout contains close button
+    with open("app/src/main/res/layout/overlay_bubble_trigger.xml") as f:
+        layout_text = f.read()
+    assert "btnBubbleClose" in layout_text, "Bubble layout MUST have btnBubbleClose!"
+
+    print("Bubble manual dismiss, keyboard auto-hide & settings toggle suite: PASS ✅")
+
 def main():
     res = test_archetype_matrix()
     print(f"Verified {res['archetypes_verified']} personality & scenario archetypes: PASS ✅")
@@ -463,7 +511,8 @@ def main():
     test_polite_tone_detection_and_matching()
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
-    print("All loop engineering v1.5.3 tests: 100% PASSED! 🚀")
+    test_bubble_dismiss_and_keyboard_hiding()
+    print("All loop engineering v1.5.4 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

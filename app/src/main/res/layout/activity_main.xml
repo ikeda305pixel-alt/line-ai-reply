@@ -99,13 +99,42 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/btn_open_overlay" />
 
+                <!-- Floating Bubble ON/OFF Switch -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchFloatingBubble"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:checked="true"
+                    android:text="トーク画面でのバブル（💬）表示"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="※OFFにすると画面端にアイコンを一切出さず完全に非表示にします。バブル上の『✕』ボタンでもワンタップで消去できます。"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="#FEF3C7"
+                    android:padding="8dp"
+                    android:text="💡 画面端にAndroidの『人型マーク 👤』やショートカットボタンが常駐して邪魔な場合：\n端末の『設定』→『ユーザー補助』→『LINE AI Reply』を開き、『ショートカット』をOFFにしてください。"
+                    android:textColor="#92400E"
+                    android:textSize="11sp" />
+
                 <Button
                     android:id="@+id/btnTestBubble"
                     style="@style/Widget.MaterialComponents.Button.TextButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="💬 今すぐバブルをテスト表示（動作確認）"
+                    android:text="💬 トーク画面での表示動作について確認"
                     android:textColor="@color/line_green_dark" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

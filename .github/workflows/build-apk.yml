@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.3.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.4.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,36 +46,33 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.3
-          name: LINE & Bumble AI Reply Assistant v1.5.3 (PayPay完全無干渉・敬語同期・写真リアクション・厚木茅ヶ崎ローカライズ版)
+          tag_name: v1.5.4
+          name: LINE & Bumble AI Reply Assistant v1.5.4 (バブル即時消去✕ボタン・キーボード自動隠蔽・完全非表示設定版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.3 (PayPay無干渉・厚木茅ヶ崎生活圏版)
+            ## LINE & Bumble AI返信アシスタント v1.5.4 (邪魔なアイコン完全制御版)
 
-            ### 🛡️ 【PayPay・金融アプリ等への完全無干渉（起動エラーの完全根絶）】
-            - **アクセシビリティ監視対象をLINEとBumbleに厳密限定**:
-              - `accessibility_service_config.xml` の `android:packageNames` に `jp.naver.line.android,com.bumble.app` を設定。OSレベルでPayPayや銀行アプリの監視・干渉を100%遮断。
-            - **能動的Safety Watcherによるオーバーレイ即時完全破棄**:
-              - ホーム画面、タスク切り替え、SystemUI、PayPayなどの他アプリへ遷移した瞬間、即座にオーバーレイViewをWindowManagerから物理消去（`removeView`）。
-              - さらに300ms間隔の安全コルーチンにより、PayPay起動前に画面上のオーバーレイが1ミリ秒たりとも残らないクリーンな状態を保証します。
+            ### 🚫 【「アイコンが邪魔」を完全解決する新機能】
+            - **バブル上に「✕」即座消去ボタンを新設**:
+              - フローティングバブル（💬）の横に小さな「✕」ボタンを配置しました。「今は邪魔！」と思ったらワンタップで即座に非表示にできます。
+            - **文字入力中（キーボード表示中）の自動非表示**:
+              - キーボードが開いてメッセージを入力している間は、送信ボタンや文字入力を一切塞がないよう、バブルを自動的に完全に隠します。
+            - **アプリ内設定で「バブル完全非表示」スイッチを新設**:
+              - アプリ設定画面（MainActivity）に「トーク画面でのバブル表示」ON/OFFスイッチを追加しました。OFFにすれば、画面上にバブルを1ミリも出さない完全クリーン運用が可能です。
+            - **バブルの小型化・半透明化（控えめデザイン）**:
+              - 48dpからコンパクトな40dpにスリム化し、通常時は半透明（alpha 0.82）にすることで視界を邪魔しません。
 
-            ### 🤝 【Bumble 相手の口調・トーン適応（敬語/タメ口マッチング）】
-            - **相手が敬語なら大人の好印象な敬語で返信**:
-              - 相手のメッセージが丁寧語（です・ます調、〜でしょうか、〜ですね等）の場合、馴れ馴れしいタメ口を完全禁止。誠実で爽やかな大人の敬語で回答します。
-              - 相手がフランク・タメ口なら親しみやすいトーンで同期します。
+            ### 💡 【Androidの「人型マーク 👤」ショートカットの消し方】
+            - 端末の「設定」➔「ユーザー補助」➔「LINE AI Reply」を開き、「ショートカット」をOFFにすることで、画面端のシステムアイコンも完全に消すことができます。
 
-            ### 📷 【相手の写真送信に対する自然なリアクション】
-            - 相手が写真を送ってきたことを検知し、「写真ありがとう！めっちゃ美味しそう！どこ？」「いい景色だね！」「可愛い！」など、写真に対する自然な感想や質問を含めた返信案を生成します。
-
-            ### 📍 【ユーザー生活圏（厚木・茅ヶ崎、神奈川）ローカライズ＆東京提案の完全禁止】
-            - **生活拠点を神奈川県（厚木市・茅ヶ崎市・湘南エリア）に完全設定**:
-              - 勝手に「渋谷で肉食べよう」「恵比寿のカフェ」など東京を提案することを【完全禁止】にしました。
-              - 相手のプロフィールや居住地を踏まえつつ、厚木、本厚木、茅ヶ崎、海老名、辻堂、藤沢、平塚、横浜など、お互いが無理なく会える神奈川エリア基準の提案を行います。
+            ### 🛡️ 【PayPay完全無干渉＆厚木・茅ヶ崎生活圏ローカライズ】
+            - LINEとBumble以外ではオーバーレイ・アクセシビリティを100%完全遮断。
+            - ユーザー拠点は「厚木市・茅ヶ崎市・湘南エリア在住」に固定し、東京提案は完全禁止。
 
             ### 🛡️ 【固定署名キーストアによる直接「更新」】
             - アプリのアンインストール不要で、そのまま「更新」を押すだけで即座にアップデート完了。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.3.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.4.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

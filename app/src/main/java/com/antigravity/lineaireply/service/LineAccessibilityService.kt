@@ -55,18 +55,25 @@ class LineAccessibilityService : AccessibilityService() {
     }
 
     private var safetyWatchJob: Job? = null
+    private var isDismissedManually = false
+    private var lastChatRoomPartner = ""
 
     private fun startSafetyWatcher() {
         if (safetyWatchJob?.isActive == true) return
         safetyWatchJob = serviceScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(300)
+                kotlinx.coroutines.delay(250)
                 val currentRoot = rootInActiveWindow
-                val currentPkg = currentRoot?.packageName?.toString() ?: ""
+                if (currentRoot == null) {
+                    overlayManager.hideAll()
+                    break
+                }
+                val currentPkg = currentRoot.packageName?.toString() ?: ""
                 val isTargetApp = (currentPkg == PKG_LINE || currentPkg == PKG_BUMBLE)
                 val inChat = isTargetApp && ChatConversationExtractor.isChatRoom(currentRoot)
                 if (!inChat) {
                     overlayManager.hideAll()
+                    isDismissedManually = false // Reset when user exits the chat room
                     break
                 }
             }
@@ -82,12 +89,13 @@ class LineAccessibilityService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: ""
 
-        // Handle soft keyboards gracefully: keep bubble if actively typing inside LINE/Bumble chat room
+        // Hide bubble when keyboard is open to avoid blocking input or send buttons!
         val isKeyboard = pkg.contains("inputmethod", ignoreCase = true) ||
                 pkg.contains("gboard", ignoreCase = true) ||
                 pkg.contains("ime", ignoreCase = true)
 
         if (isKeyboard) {
+            overlayManager.hideBubble()
             val root = rootInActiveWindow
             val currentPkg = root?.packageName?.toString() ?: ""
             if (currentPkg != PKG_LINE && currentPkg != PKG_BUMBLE) {
@@ -103,6 +111,7 @@ class LineAccessibilityService : AccessibilityService() {
         if (pkg != PKG_LINE && pkg != PKG_BUMBLE) {
             overlayManager.hideAll()
             stopSafetyWatcher()
+            isDismissedManually = false
             return
         }
 
@@ -120,11 +129,21 @@ class LineAccessibilityService : AccessibilityService() {
                 ChatConversationExtractor.cacheProfileIfVisible(root)
             }
 
-            // Show floating bubble ONLY when replies modal is not open
-            if (!overlayManager.isRepliesShowing()) {
-                overlayManager.showBubble(platform) {
-                    handleBubbleClicked(platform, pkg)
-                }
+            // Check if floating bubble is enabled in settings
+            val isBubbleEnabled = prefs.getBoolean("enable_floating_bubble", true)
+
+            // Show floating bubble ONLY when replies modal is not open, not manually dismissed, and enabled in settings
+            if (isBubbleEnabled && !isDismissedManually && !overlayManager.isRepliesShowing()) {
+                overlayManager.showBubble(
+                    platform = platform,
+                    onClick = {
+                        handleBubbleClicked(platform, pkg)
+                    },
+                    onClose = {
+                        isDismissedManually = true
+                        Toast.makeText(this@LineAccessibilityService, "AI返信アイコンを閉じました（別のトークを開くと再開します）", Toast.LENGTH_SHORT).show()
+                    }
+                )
                 startSafetyWatcher()
             }
 
@@ -140,6 +159,7 @@ class LineAccessibilityService : AccessibilityService() {
             // HIDE IMMEDIATELY so it never gets in the user's way!
             overlayManager.hideAll()
             stopSafetyWatcher()
+            isDismissedManually = false
         }
     }
 
@@ -382,10 +402,18 @@ class LineAccessibilityService : AccessibilityService() {
                 },
                 onDismiss = {
                     val currentRoot = rootInActiveWindow
-                    if (ChatConversationExtractor.isChatRoom(currentRoot)) {
-                        overlayManager.showBubble(chatContext.platform) {
-                            handleBubbleClicked(chatContext.platform, if (isBumble) PKG_BUMBLE else PKG_LINE)
-                        }
+                    val isBubbleEnabled = prefs.getBoolean("enable_floating_bubble", true)
+                    if (isBubbleEnabled && !isDismissedManually && ChatConversationExtractor.isChatRoom(currentRoot)) {
+                        overlayManager.showBubble(
+                            platform = chatContext.platform,
+                            onClick = {
+                                handleBubbleClicked(chatContext.platform, if (isBumble) PKG_BUMBLE else PKG_LINE)
+                            },
+                            onClose = {
+                                isDismissedManually = true
+                                Toast.makeText(this@LineAccessibilityService, "AI返信アイコンを閉じました（別のトークを開くと再開します）", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                         startSafetyWatcher()
                     }
                 }

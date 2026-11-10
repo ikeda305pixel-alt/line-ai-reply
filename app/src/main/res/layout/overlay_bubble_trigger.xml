@@ -1,16 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bubbleRoot"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="2dp">
 
+    <!-- Close button to dismiss immediately when user wants no distraction -->
+    <TextView
+        android:id="@+id/btnBubbleClose"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginEnd="3dp"
+        android:background="@drawable/bg_close_bubble"
+        android:gravity="center"
+        android:text="✕"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <!-- Main trigger bubble (compact 40dp, semi-translucent) -->
     <TextView
         android:id="@+id/bubbleIcon"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:background="@drawable/bg_floating_bubble"
-        android:elevation="10dp"
+        android:elevation="6dp"
         android:gravity="center"
         android:text="💬"
-        android:textSize="20sp" />
-</FrameLayout>
+        android:textSize="18sp" />
+</LinearLayout>

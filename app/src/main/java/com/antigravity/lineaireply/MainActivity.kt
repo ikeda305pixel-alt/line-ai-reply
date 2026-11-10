@@ -73,6 +73,17 @@ class MainActivity : AppCompatActivity() {
         editKey.setText(prefs.getString("gemini_key", ""))
         updateStatus(textStatus, textUserStyleStatus)
 
+        val switchFloatingBubble = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchFloatingBubble)
+        switchFloatingBubble.isChecked = prefs.getBoolean("enable_floating_bubble", true)
+        switchFloatingBubble.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("enable_floating_bubble", isChecked).apply()
+            if (isChecked) {
+                Toast.makeText(this, "トーク画面でのバブル表示をONにしました", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "バブルを完全非表示にしました（画面端にアイコンは出なくなります）", Toast.LENGTH_LONG).show()
+            }
+        }
+
         btnAccessibility.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
