@@ -3,8 +3,10 @@ package com.antigravity.lineaireply.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
 import com.antigravity.lineaireply.ai.ChatContext
 import com.antigravity.lineaireply.ai.ConversationMemoryManager
@@ -15,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LineAccessibilityService : AccessibilityService() {
 
@@ -26,6 +29,7 @@ class LineAccessibilityService : AccessibilityService() {
     private lateinit var overlayManager: SmartOverlayManager
 
     companion object {
+        private const val TAG = "LineAccessService"
         const val PKG_LINE = "jp.naver.line.android"
         const val PKG_BUMBLE = "com.bumble.app"
     }
