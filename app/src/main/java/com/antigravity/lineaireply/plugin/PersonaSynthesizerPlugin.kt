@@ -36,6 +36,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
         val isBumble = context.platform == "Bumble"
         val shouldInvite = (context.shouldSuggestLineInvite || forceLineInvite)
         val isEnglishOrForeign = context.isEnglishPartner
+        val partnerResolvedName = context.partnerName.ifEmpty { partnerDossier.name.ifEmpty { "相手" } }
 
         // Use accumulated history if present, fallback to on-screen turns
         val allTurns = if (accumulatedHistory.isNotEmpty()) {
@@ -73,7 +74,6 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
         }
 
         val userSamplesText = userStyle.sampleQuotes.take(10).joinToString("\n") { "  ・$it" }
-        val partnerResolvedName = context.partnerName.ifEmpty { partnerDossier.name.ifEmpty { "相手" } }
 
         return if (isBumble) {
             """
