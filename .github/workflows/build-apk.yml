@@ -61,11 +61,6 @@ jobs:
               LINEトーク履歴（.txt）や貼り付けからの過去ログ分析時にも、動的検知された稼働モデルを使用。
             - **通信テストで「利用モデル名」をダイアログ表示**:
               「🔑 APIキーの通信テスト」をタップすると、接続成功した最新モデル名（例: `gemini-2.5-flash`）が明確に確認できます。
-          files: |
-            app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
-          make_latest: true
-
             ### 🔧 APIエラー対策＆通信安定化アップデート
             - **APIキー自動サニタイズ**: コピペ時に紛れ込みやすい引用符（"）、前後の改行・空白・全角スペースを自動除去。
             - **キー形式バリデーション＆パスワード可視化トグル**: Google AI Studioのキー（通常 `AIzaSy...`）と異なる場合に親切な確認ダイアログを表示。目玉アイコンで入力内容を目視確認可能。
@@ -73,7 +68,7 @@ jobs:
               - HTTP 400: 無効なキー（末尾の欠け、別サービスのキー等）
               - HTTP 403: Google Cloudプロジェクトの権限・API未有効化・地域制限
               - HTTP 429: 無料枠のレート制限（1分置いて再試行）
-            - **複数モデル（1.5-flash / 1.5-flash-latest / 2.0-flash）自動フォールバック**: 1つのモデルがビジーやエラーでも自動的に次を試行。
+            - **複数モデル（2.5-flash / 2.0-flash / 1.5-flash）自動フォールバック**: 1つのモデルがビジーやエラーでも自動的に次を試行。
             - **Markdownコードブロック（```json）混入耐性**: AIがコードブロック付きで返答しても100%パースできる堅牢パーサーを搭載。
 
             ### 過去全ログ学習 ＆ コミュ力プロ × 俺スタイル
@@ -81,7 +76,7 @@ jobs:
             - 相手の生息エリア（渋谷・恵比寿等）と人間性（わがまま・構ってちゃん等）をプロファイリングし、俺の口調をブレンドして心地よく転がす返信案を生成。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.1.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.2.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
