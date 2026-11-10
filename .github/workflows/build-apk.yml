@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.4.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.5.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,33 +46,32 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.4
-          name: LINE & Bumble AI Reply Assistant v1.5.4 (バブル即時消去✕ボタン・キーボード自動隠蔽・完全非表示設定版)
+          tag_name: v1.5.5
+          name: LINE & Bumble AI Reply Assistant v1.5.5 (厳格検品合格版・東京提案完全根絶＆キーボード連動＆Bumbleプロフ独立キャッシュ)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.4 (邪魔なアイコン完全制御版)
+            ## LINE & Bumble AI返信アシスタント v1.5.5 (厳格検品修正版)
 
-            ### 🚫 【「アイコンが邪魔」を完全解決する新機能】
-            - **バブル上に「✕」即座消去ボタンを新設**:
-              - フローティングバブル（💬）の横に小さな「✕」ボタンを配置しました。「今は邪魔！」と思ったらワンタップで即座に非表示にできます。
-            - **文字入力中（キーボード表示中）の自動非表示**:
-              - キーボードが開いてメッセージを入力している間は、送信ボタンや文字入力を一切塞がないよう、バブルを自動的に完全に隠します。
-            - **アプリ内設定で「バブル完全非表示」スイッチを新設**:
-              - アプリ設定画面（MainActivity）に「トーク画面でのバブル表示」ON/OFFスイッチを追加しました。OFFにすれば、画面上にバブルを1ミリも出さない完全クリーン運用が可能です。
-            - **バブルの小型化・半透明化（控えめデザイン）**:
-              - 48dpからコンパクトな40dpにスリム化し、通常時は半透明（alpha 0.82）にすることで視界を邪魔しません。
-
-            ### 💡 【Androidの「人型マーク 👤」ショートカットの消し方】
-            - 端末の「設定」➔「ユーザー補助」➔「LINE AI Reply」を開き、「ショートカット」をOFFにすることで、画面端のシステムアイコンも完全に消すことができます。
-
-            ### 🛡️ 【PayPay完全無干渉＆厚木・茅ヶ崎生活圏ローカライズ】
-            - LINEとBumble以外ではオーバーレイ・アクセシビリティを100%完全遮断。
-            - ユーザー拠点は「厚木市・茅ヶ崎市・湘南エリア在住」に固定し、東京提案は完全禁止。
+            ### 🎯 【厳格検品による修正・改良点】
+            1. **東京（渋谷・恵比寿・新宿等）提案の完全根絶**:
+               - 定型文フォールバックやサンプルフレーズに残存していた「渋谷か恵比寿あたり」を完全削除。
+               - 神奈川エリア（本厚木・海老名・茅ヶ崎・辻堂・藤沢・横浜）のみに完全統一。
+            2. **相手の生息地「全員厚木・茅ヶ崎扱い」バグの解消**:
+               - 相手プロファイルのデフォルト生活圏を「不明」に修正。
+               - 会話やBumbleプロフで場所が判明していない相手には「生息: ...」を表示せず、性格タイプのみをクリーンに表示。
+            3. **キーボード表示中のバブル自動隠蔽を完全動作化**:
+               - `AccessibilityWindowInfo.TYPE_INPUT_METHOD` によるOSレベルのソフトキーボード検知を実装。文字入力中はバブルが自動退避し、キーボードを閉じると再出現します。
+               - バックグラウンド監視ループを `Dispatchers.Default` に逃がし、LINE/BumbleのUIカクつき・重さを解消。
+            4. **Bumbleプロフィール画面での独立キャッシュ**:
+               - トーク外（プロフ画面）でも相手の自己紹介・居住地情報を確実に読み込み、相手ごとに個別マップで分離管理（別マッチ相手との情報混同を防止）。
+            5. **敬語判定＆写真検知の精密化**:
+               - 「よろしくー！」などのタメ口や「クリスマス」などの部分一致を敬語誤検知しないよう正規表現を強化。
+               - 「写真立て買った」などの日常会話で写真リアクションが誤発動しないようマーカー判定を厳格化。フォールバックでも写真リアクション＆敬語返信に対応。
 
             ### 🛡️ 【固定署名キーストアによる直接「更新」】
-            - アプリのアンインストール不要で、そのまま「更新」を押すだけで即座にアップデート完了。
+            - 固定キーストア署名のため、旧バージョンをアンインストールせずそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.4.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.5.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

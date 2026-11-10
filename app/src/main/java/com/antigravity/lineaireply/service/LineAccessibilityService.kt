@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.graphics.Rect
 import android.widget.Toast
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
@@ -56,25 +57,58 @@ class LineAccessibilityService : AccessibilityService() {
 
     private var safetyWatchJob: Job? = null
     private var isDismissedManually = false
-    private var lastChatRoomPartner = ""
+    private var isKeyboardVisible = false
 
     private fun startSafetyWatcher() {
         if (safetyWatchJob?.isActive == true) return
-        safetyWatchJob = serviceScope.launch {
+        safetyWatchJob = serviceScope.launch(Dispatchers.Default) {
             while (true) {
-                kotlinx.coroutines.delay(250)
+                kotlinx.coroutines.delay(300)
                 val currentRoot = rootInActiveWindow
                 if (currentRoot == null) {
-                    overlayManager.hideAll()
+                    withContext(Dispatchers.Main) {
+                        overlayManager.hideAll()
+                    }
                     break
                 }
                 val currentPkg = currentRoot.packageName?.toString() ?: ""
                 val isTargetApp = (currentPkg == PKG_LINE || currentPkg == PKG_BUMBLE)
                 val inChat = isTargetApp && ChatConversationExtractor.isChatRoom(currentRoot)
                 if (!inChat) {
-                    overlayManager.hideAll()
-                    isDismissedManually = false // Reset when user exits the chat room
+                    withContext(Dispatchers.Main) {
+                        overlayManager.hideAll()
+                        isDismissedManually = false // Reset when user exits the chat room
+                    }
                     break
+                }
+
+                // Check soft keyboard visibility via interactive window list
+                val hasKeyboard = try {
+                    windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                } catch (e: Exception) {
+                    false
+                }
+
+                if (hasKeyboard != isKeyboardVisible) {
+                    isKeyboardVisible = hasKeyboard
+                    withContext(Dispatchers.Main) {
+                        if (hasKeyboard) {
+                            overlayManager.hideBubble()
+                        } else {
+                            val isBubbleEnabled = prefs.getBoolean("enable_floating_bubble", true)
+                            if (isBubbleEnabled && !isDismissedManually && !overlayManager.isRepliesShowing()) {
+                                val platform = if (currentPkg == PKG_BUMBLE) "Bumble" else "LINE"
+                                overlayManager.showBubble(
+                                    platform = platform,
+                                    onClick = { handleBubbleClicked(platform, currentPkg) },
+                                    onClose = {
+                                        isDismissedManually = true
+                                        Toast.makeText(this@LineAccessibilityService, "AI返信アイコンを閉じました（別のトークを開くと再開します）", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -83,26 +117,18 @@ class LineAccessibilityService : AccessibilityService() {
     private fun stopSafetyWatcher() {
         safetyWatchJob?.cancel()
         safetyWatchJob = null
+        isKeyboardVisible = false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: ""
 
-        // Hide bubble when keyboard is open to avoid blocking input or send buttons!
-        val isKeyboard = pkg.contains("inputmethod", ignoreCase = true) ||
-                pkg.contains("gboard", ignoreCase = true) ||
-                pkg.contains("ime", ignoreCase = true)
+        val root = rootInActiveWindow
 
-        if (isKeyboard) {
-            overlayManager.hideBubble()
-            val root = rootInActiveWindow
-            val currentPkg = root?.packageName?.toString() ?: ""
-            if (currentPkg != PKG_LINE && currentPkg != PKG_BUMBLE) {
-                overlayManager.hideAll()
-                stopSafetyWatcher()
-            }
-            return
+        // Continuous Bumble Profile Cache (even outside chat room, e.g. looking at partner's profile screen)
+        if (pkg == PKG_BUMBLE) {
+            ChatConversationExtractor.cacheProfileIfVisible(root)
         }
 
         // CRITICAL PROTECTION FOR PAYPAY & FINANCIAL APPS:
@@ -115,7 +141,6 @@ class LineAccessibilityService : AccessibilityService() {
             return
         }
 
-        val root = rootInActiveWindow
         val isInChatRoom = ChatConversationExtractor.isChatRoom(root)
 
         if (isInChatRoom) {
@@ -124,16 +149,11 @@ class LineAccessibilityService : AccessibilityService() {
                 else -> "LINE"
             }
 
-            // In Bumble, continuously cache profile prompts if visible
-            if (pkg == PKG_BUMBLE) {
-                ChatConversationExtractor.cacheProfileIfVisible(root)
-            }
-
             // Check if floating bubble is enabled in settings
             val isBubbleEnabled = prefs.getBoolean("enable_floating_bubble", true)
 
-            // Show floating bubble ONLY when replies modal is not open, not manually dismissed, and enabled in settings
-            if (isBubbleEnabled && !isDismissedManually && !overlayManager.isRepliesShowing()) {
+            // Show floating bubble ONLY when replies modal is not open, not manually dismissed, keyboard not open, and enabled in settings
+            if (isBubbleEnabled && !isDismissedManually && !isKeyboardVisible && !overlayManager.isRepliesShowing()) {
                 overlayManager.showBubble(
                     platform = platform,
                     onClick = {
@@ -146,6 +166,7 @@ class LineAccessibilityService : AccessibilityService() {
                 )
                 startSafetyWatcher()
             }
+
 
             // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
             if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
@@ -379,8 +400,10 @@ class LineAccessibilityService : AccessibilityService() {
 
             val profilePreview = if (chatContext.profileSnippet.isNotBlank()) {
                 chatContext.profileSnippet
-            } else if (partnerDossier.location.isNotBlank()) {
+            } else if (partnerDossier.location.isNotBlank() && partnerDossier.location != "不明") {
                 "生息: ${partnerDossier.location} / 性格: ${partnerDossier.personalityType}"
+            } else if (partnerDossier.personalityType.isNotBlank() && partnerDossier.personalityType != "感情表現豊か・リアクション重視") {
+                "性格: ${partnerDossier.personalityType}"
             } else {
                 ""
             }

@@ -162,7 +162,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                 val obj = root.getJSONObject(key)
                 return PartnerDossier(
                     name = key,
-                    location = obj.optString("location", "神奈川・湘南（厚木・茅ヶ崎エリア）"),
+                    location = obj.optString("location", "不明"),
                     personalityType = obj.optString("personality", "ノリ重視・フランク"),
                     strategy = obj.optString("strategy", "適度にイジりつつ肯定して甘やかし、テンポよく主導権を握る"),
                     accumulatedMessageCount = obj.optInt("count", getAccumulatedTurnCount(key))
@@ -174,7 +174,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
         return PartnerDossier(
             name = key,
-            location = "神奈川・湘南（厚木・茅ヶ崎エリア）",
+            location = "不明",
             personalityType = "感情表現豊か・リアクション重視",
             strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす",
             accumulatedMessageCount = getAccumulatedTurnCount(key)
@@ -285,7 +285,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                 以下のJSONフォーマットのみを出力してください（Markdown等不要）：
                 {
                   "user_style_summary": "ユーザーの口調・文体の精密な特徴（語尾、テンポ、一人称、ツッコミ癖、絵文字傾向、タメ口度など）を100文字程度で要約",
-                  "partner_location": "相手の発言から推定される生活圏・生息エリア（例: 渋谷・恵比寿、中目黒、中央線沿線、横浜など。推測できなければ『都内近郊』）",
+                  "partner_location": "相手の発言から推定される生活圏・生息エリア（例: 横浜、川崎、湘南、小田原、都内など。推測できなければ『不明』）",
                   "partner_personality": "相手の性格・人間性の分析（例: わがまま、めんどくさい構ってちゃん、ノリ重視、警戒心強め、サバサバ系、寂しがりなど）",
                   "partner_strategy": "プロのコミュニケーターとして相手を最も心地よく転がし、主導権を握るための具体的な対応方針"
                 }
@@ -352,7 +352,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
                     val resultJson = JSONObject(outText.trim())
                     val userStyleSummary = resultJson.optString("user_style_summary", "")
-                    val partnerLoc = resultJson.optString("partner_location", "都内")
+                    val partnerLoc = resultJson.optString("partner_location", "不明")
                     val partnerPers = resultJson.optString("partner_personality", "ノリ重視")
                     val partnerStrat = resultJson.optString("partner_strategy", "共感とイジりで主導権を握る")
 
@@ -528,7 +528,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
     private fun profilePartnerPersona(partnerName: String, partnerMessages: List<MessageTurn>): PartnerDossier {
         val combined = partnerMessages.joinToString(" ") { it.text }
-        val detectedArea = detectLocations(combined).ifEmpty { "神奈川・湘南（厚木・茅ヶ崎エリア）" }
+        val detectedArea = detectLocations(combined).ifEmpty { "不明" }
 
         val hasWhining = combined.contains(Regex("無理|嫌|〜して|今すぐ|わがまま|連れてって|おごって|ダメ"))
         val hasComplaints = combined.contains(Regex("うざ|疲れた|最悪|聞いて|大変|死ぬ|きつい"))

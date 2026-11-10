@@ -47,7 +47,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
     private val TIMESTAMP_REGEX = Regex("^(午前|午後)?\\s*\\d{1,2}:\\d{2}$")
     private val DATE_REGEX = Regex("^(\\d{1,4}[年/.-])?\\d{1,2}[月/.-]\\d{1,2}(日)?(\\s*\\(.*\\))?$")
-    private val POLITE_REGEX = Regex("(です|ます|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしく|お願いします|ありがとうございます|いただけます|頂け|ご都合|いかが|存じ|恐れ入)")
+    private val POLITE_REGEX = Regex("(です[。！？!\\?\\s]*$|ます[。！？!\\?\\s]*$|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し)")
 
     val PHOTO_WORDS = setOf(
         "写真", "写真を送信しました", "画像", "画像を送信しました", "photo", "image", "[写真]", "[画像]", "photo sent"
@@ -71,8 +71,10 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         "言語", "身長", "血液型", "お酒", "タバコ", "ペット", "趣味", "興味", "プロンプト", "ステータスメッセージ"
     )
 
-    // Cached profile across views in Bumble
-    private var cachedBumbleProfile: String = ""
+    // Cached profile across views in Bumble keyed per partner
+    private val cachedBumbleProfiles = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var lastProfileSnippet: String = ""
+    private var lastProfilePartnerName: String = ""
 
     override fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?) {
         if (rootNode == null) return
@@ -80,7 +82,12 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         scanForProfileTexts(rootNode, profileList)
         val snippet = profileList.distinct().take(4).joinToString(" | ")
         if (snippet.isNotBlank()) {
-            cachedBumbleProfile = snippet
+            lastProfileSnippet = snippet
+            val name = extractHeaderTitle(rootNode, 2400)
+            if (name.isNotBlank()) {
+                lastProfilePartnerName = name
+                cachedBumbleProfiles[name] = snippet
+            }
         }
     }
 
@@ -113,10 +120,15 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val visibleProfileList = mutableListOf<String>()
         scanForProfileTexts(rootNode, visibleProfileList)
         val visibleProfile = visibleProfileList.distinct().take(4).joinToString(" | ")
-        if (visibleProfile.isNotBlank()) {
-            cachedBumbleProfile = visibleProfile
+        if (visibleProfile.isNotBlank() && partnerName.isNotBlank()) {
+            cachedBumbleProfiles[partnerName] = visibleProfile
         }
-        val finalProfile = if (visibleProfile.isNotBlank()) visibleProfile else cachedBumbleProfile
+        val finalProfile = when {
+            visibleProfile.isNotBlank() -> visibleProfile
+            partnerName.isNotBlank() && cachedBumbleProfiles.containsKey(partnerName) -> cachedBumbleProfiles[partnerName] ?: ""
+            lastProfilePartnerName.isEmpty() || lastProfilePartnerName == partnerName -> lastProfileSnippet
+            else -> ""
+        }
 
         // 3. Extract Message Nodes with spatial bounding boxes (strictly above the input field)
         val rawCandidates = mutableListOf<RawTextNode>()
@@ -183,7 +195,8 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val latestMyMessage = myTurns.lastOrNull()?.text ?: ""
 
         val isPartnerPhotoRecent = latestPartnerTurn != null &&
-                (latestPartnerTurn.text.contains("📷") || latestPartnerTurn.text.contains("写真"))
+                (latestPartnerTurn.text.contains("📷") ||
+                 PHOTO_WORDS.any { latestPartnerTurn.text.equals(it, ignoreCase = true) || latestPartnerTurn.text.contains("写真を送信しました") })
 
         val partnerTexts = partnerTurns.map { it.text }
         val isPartnerPolite = detectPoliteTone(partnerTexts)
@@ -339,9 +352,12 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             val isFullWidthContainer = rect.width() > screenWidth * 0.95 && rect.height() > screenHeight * 0.3
             if (!isFullWidthContainer) {
                 val lower = rawText.lowercase()
-                val isPhotoNode = PHOTO_WORDS.any { lower == it || lower.contains("写真を送信") } ||
-                        cls.contains("ImageView", ignoreCase = true) && (lower.contains("写真") || lower.contains("photo") || lower.contains("image"))
-                if (isPhotoNode) {
+                val isExplicitPhotoText = PHOTO_WORDS.any { lower == it || lower.contains("写真を送信") || lower.contains("画像を送信") }
+                val isImageNode = cls.contains("ImageView", ignoreCase = true) &&
+                        rect.width() >= (screenWidth * 0.2).toInt() && rect.height() >= (screenHeight * 0.08).toInt() &&
+                        (lower.contains("写真") || lower.contains("photo") || lower.contains("image") || rawText.isEmpty())
+
+                if (isExplicitPhotoText || isImageNode) {
                     list.add(RawTextNode("📷 [写真を送信しました]", rect))
                 } else if (rawText.isNotBlank() && !isSystemLabel(rawText)) {
                     list.add(RawTextNode(rawText, rect))

@@ -76,14 +76,14 @@ class SmartChatAssistant(
         val shouldInvite = (context.shouldSuggestLineInvite || forceLineInvite)
 
         val userStyle = memoryManager?.getUserStyle() ?: UserStyleProfile(
-            summary = "フランクなタメ口。短文（15〜30文字）でテンポ重視。ツッコミや軽いイジりが好きで、絵文字は控えめ（😂や笑を多用）。ストレートで回りくどい言い回しを嫌う。",
-            sampleQuotes = listOf("あいてるよ！なんかある？", "渋谷で肉食べよー🥩", "それ笑うんだけど😂", "仕事終わったら連絡するわ！"),
+            summary = "フランクなタメ口。短文（15〜30文字）でテンポ重視。ツッコミや軽いイジりが好きで、絵文字は控えめ（😂や笑を多用）。ストレートで回りくどい言い回しを嫌う。神奈川（厚木・海老名・茅ヶ崎・湘南）在住。",
+            sampleQuotes = listOf("あいてるよ！なんかある？", "本厚木か茅ヶ崎で肉食べよー🥩", "それ笑うんだけど😂", "仕事終わったら連絡するわ！"),
             totalLearnedCount = 4
         )
 
         val partnerDossier = memoryManager?.getPartnerDossier(context.partnerName) ?: PartnerDossier(
             name = context.partnerName.ifEmpty { "相手" },
-            location = "都内近郊",
+            location = "不明",
             personalityType = "感情表現豊か・リアクション重視",
             strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす",
             accumulatedMessageCount = 0

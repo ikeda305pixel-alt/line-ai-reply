@@ -12,7 +12,7 @@ data class UserStyleProfile(
 
 data class PartnerDossier(
     val name: String,
-    val location: String, // e.g. "渋谷・恵比寿周辺", "中央線沿線", "不明"
+    val location: String, // e.g. "湘南・茅ヶ崎", "横浜", "不明"
     val personalityType: String, // e.g. "ちょいワガママ・構ってちゃん", "ノリ重視・フランク", "警戒心強め・慎重"
     val strategy: String, // Professional communication strategy
     val accumulatedMessageCount: Int

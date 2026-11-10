@@ -338,6 +338,14 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
         if (context.platform == "Bumble") {
             if (context.isEnglishPartner) {
+                if (context.isPartnerPhotoRecent) {
+                    return listOf(
+                        SmartReplyOption("📸 React to Photo", "Love the photo! Thanks for sharing 📸"),
+                        SmartReplyOption("💬 Ask Details", "Where was this taken? The vibe looks amazing! ✨"),
+                        SmartReplyOption("😄 Witty Banter", "Okay, this is officially the best photo I've seen today haha"),
+                        SmartReplyOption("🎯 Direct Vibe", "Looks like so much fun! 😊")
+                    )
+                }
                 return if (shouldInvite) {
                     listOf(
                         SmartReplyOption("🎯 Direct Answer", "Haha absolutely! That sounds like such a great vibe 😊"),
@@ -354,20 +362,56 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
                     )
                 }
             } else {
+                val isPolite = context.isPartnerPolite
+                if (context.isPartnerPhotoRecent) {
+                    return if (isPolite) {
+                        listOf(
+                            SmartReplyOption("📸 写真リアクション", "お写真ありがとうございます！すごく素敵ですね✨"),
+                            SmartReplyOption("💬 写真の質問", "これどこで撮られたんですか？雰囲気めちゃくちゃ良いですね！"),
+                            SmartReplyOption("😄 丁寧・ノリ良く", "めちゃくちゃ映えてますね！センス抜群です笑"),
+                            SmartReplyOption("🎯 ポジティブ共感", "見てるだけで楽しそうなのが伝わってきます😊")
+                        )
+                    } else {
+                        listOf(
+                            SmartReplyOption("📸 写真リアクション", "写真ありがとう！めっちゃいいねこれ📸"),
+                            SmartReplyOption("💬 写真の質問", "これどこで撮ったやつ？めちゃくちゃ雰囲気いいじゃん！"),
+                            SmartReplyOption("😄 俺流ツッコミ", "映えまくってて笑った😂 センス良すぎ！"),
+                            SmartReplyOption("🎯 ポジティブ共感", "楽しそうなの伝わってくるわ〜！最高😊")
+                        )
+                    }
+                }
                 return if (shouldInvite) {
-                    listOf(
-                        SmartReplyOption("🎯 俺流・即答", "あいてるよ！肉めっちゃ好き🥩 渋谷か恵比寿あたりなら行きやすいな"),
-                        SmartReplyOption("☕️ 俺流・共感質問", "それめっちゃわかる！普段どんな店によく行くの？😊"),
-                        SmartReplyOption("😄 俺流・ツッコミ", "行動力ありすぎて笑った😂 でもそういうノリ好きだわ笑"),
-                        SmartReplyOption("📲 LINE交換", JA_LINE_INVITE)
-                    )
+                    if (isPolite) {
+                        listOf(
+                            SmartReplyOption("🎯 丁寧・即答", "空いてますよ！お肉大好きです🥩 本厚木か海老名、茅ヶ崎あたりだと行きやすくて助かります！"),
+                            SmartReplyOption("☕️ 丁寧・共感質問", "それすごく共感できます！普段はどういうお店によく行かれるんですか？😊"),
+                            SmartReplyOption("😄 丁寧・ノリ良く", "フットワーク軽くて素敵ですね！そういうポジティブなノリ大好きです笑"),
+                            SmartReplyOption("📲 LINEご案内", "もしよろしければLINEでもお話ししませんか？✨ $JA_LINE_INVITE")
+                        )
+                    } else {
+                        listOf(
+                            SmartReplyOption("🎯 俺流・即答", "あいてるよ！肉めっちゃ好き🥩 本厚木か海老名、茅ヶ崎あたりなら行きやすいな"),
+                            SmartReplyOption("☕️ 俺流・共感質問", "それめっちゃわかる！普段どんな店によく行くの？😊"),
+                            SmartReplyOption("😄 俺流・ツッコミ", "行動力ありすぎて笑った😂 でもそういうノリ好きだわ笑"),
+                            SmartReplyOption("📲 LINE交換", JA_LINE_INVITE)
+                        )
+                    }
                 } else {
-                    listOf(
-                        SmartReplyOption("🎯 俺流・即答", "それめっちゃわかる！俺もちょうどそれ食べたかったところ"),
-                        SmartReplyOption("☕️ 俺流・共感質問", "プロフ見て気になってた！いつ頃からハマってるの？✨"),
-                        SmartReplyOption("😄 俺流・ツッコミ", "センス良すぎて笑う😂 もっと詳しく聞かせて！"),
-                        SmartReplyOption("🚀 爽やか提案", "もしよかったら今度サクッと美味しいご飯行こ！予定合わせよ〜")
-                    )
+                    if (isPolite) {
+                        listOf(
+                            SmartReplyOption("🎯 丁寧・即答", "それすごくよく分かります！私もまさにそれ食べたかったところでした"),
+                            SmartReplyOption("☕️ 丁寧・共感質問", "プロフィール拝見して気になってました！いつ頃から始められたんですか？✨"),
+                            SmartReplyOption("😄 丁寧・ノリ良く", "センス良くて思わず笑っちゃいました😂 ぜひ詳しく教えてください！"),
+                            SmartReplyOption("🚀 爽やかご提案", "もしよろしければ、今度サクッと美味しいご飯でもご一緒しませんか？")
+                        )
+                    } else {
+                        listOf(
+                            SmartReplyOption("🎯 俺流・即答", "それめっちゃわかる！俺もちょうどそれ食べたかったところ"),
+                            SmartReplyOption("☕️ 俺流・共感質問", "プロフ見て気になってた！いつ頃からハマってるの？✨"),
+                            SmartReplyOption("😄 俺流・ツッコミ", "センス良すぎて笑う😂 もっと詳しく聞かせて！"),
+                            SmartReplyOption("🚀 爽やか提案", "もしよかったら今度サクッと美味しいご飯行こ！予定合わせよ〜")
+                        )
+                    }
                 }
             }
         }
@@ -383,7 +427,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
                     SmartReplyOption("😄 Humor / Reaction", "Haha I was literally just about to text you about that! Let's do it 🍻")
                 )
                 q.contains("where") || q.contains("place") || q.contains("restaurant") || q.contains("bar") || q.contains("spot") -> listOf(
-                    SmartReplyOption("🎯 Direct YES", "Anywhere around Shibuya or Ebisu is super convenient for me!"),
+                    SmartReplyOption("🎯 Direct YES", "Anywhere around Yokohama, Shonan, or nearby is super convenient for me!"),
                     SmartReplyOption("🙅‍♂️ Alternative NO", "That place might be packed, how about that quiet spot near the station?"),
                     SmartReplyOption("💬 Details / Question", "What kind of food are you in the mood for? 😋"),
                     SmartReplyOption("😄 Humor / Reaction", "As long as there's good food, count me in anywhere haha")
@@ -397,6 +441,15 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             }
         }
 
+        if (context.isPartnerPhotoRecent) {
+            return listOf(
+                SmartReplyOption("📸 写真リアクション", "写真ありがとう！めっちゃいいねこれ📸"),
+                SmartReplyOption("💬 写真の質問", "これどこで撮ったやつ？めちゃくちゃ雰囲気いいじゃん！"),
+                SmartReplyOption("😄 俺流ツッコミ", "映えまくってて笑った😂 センス良すぎ！"),
+                SmartReplyOption("🎯 ポジティブ共感", "楽しそうなの伝わってくるわ〜！最高😊")
+            )
+        }
+
         return when {
             latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
                 SmartReplyOption("🎯 俺流・即答", "おけ！19時くらいはどう？仕事終わりちょうど良さそう！"),
@@ -405,7 +458,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
                 SmartReplyOption("😄 俺流・ツッコミ共感", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻")
             )
             latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
-                SmartReplyOption("🎯 俺流・即答", "渋谷か恵比寿あたりが行きやすくて助かる！"),
+                SmartReplyOption("🎯 俺流・即答", "本厚木か海老名、茅ヶ崎あたりが行きやすくて助かる！"),
                 SmartReplyOption("🙅‍♂️ 俺流・代案", "そこ混んでそうなら、駅前の静かなとこにする？"),
                 SmartReplyOption("💬 俺流・質問調整", "そっちの行きやすいエリアどこら辺？何系食べたい？😋"),
                 SmartReplyOption("😄 俺流・ツッコミ共感", "美味い飯があるならどこへでも飛んでくわ笑")

@@ -391,7 +391,7 @@ def test_paypay_and_financial_app_protection():
     print("PayPay & financial app 100% zero-interference suite: PASS ✅")
 
 def test_polite_tone_detection_and_matching():
-    polite_regex = r"(です|ます|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしく|お願いします|ありがとうございます|いただけます|頂け|ご都合|いかが|存じ|恐れ入)"
+    polite_regex = r"(です[。！？!\?\s]*$|ます[。！？!\?\s]*$|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し)"
 
     def detect_polite(msgs: list) -> bool:
         import re
@@ -405,10 +405,13 @@ def test_polite_tone_detection_and_matching():
     assert detect_polite(["はじめまして！マッチありがとうございます！", "普段どのあたりで遊ばれることが多いですか？"]) == True
     assert detect_polite(["カフェ巡りお好きなんですね！おすすめのお店はありますでしょうか？"]) == True
     assert detect_polite(["来週のご都合はいかがですか？"]) == True
+    assert detect_polite(["よろしくお願いします！"]) == True
 
-    # Casual / slang scenarios
+    # Casual / slang scenarios - must NOT trigger polite mode
     assert detect_polite(["おつかれー！", "それウケるんだけど笑", "今度飯行こー"]) == False
     assert detect_polite(["りょ！何時？"]) == False
+    assert detect_polite(["よろしくー！"]) == False, "Casual 'よろしくー！' must NOT trigger polite mode!"
+    assert detect_polite(["クリスマス楽しみだね"]) == False, "Sentence with 'ます' substring like クリスマス must NOT falsely trigger polite mode!"
 
     print("Partner polite tone detection & matching suite: PASS ✅")
 
@@ -417,12 +420,24 @@ def test_photo_reaction_pipeline():
 
     def is_photo_msg(raw_text: str) -> bool:
         lower = raw_text.lower().strip()
-        return any(lower == w or "写真を送信" in lower for w in photo_words)
+        return any(lower == w or "写真を送信" in lower or "画像を送信" in lower for w in photo_words)
 
     assert is_photo_msg("写真を送信しました") == True
     assert is_photo_msg("[写真]") == True
     assert is_photo_msg("Photo") == True
     assert is_photo_msg("こんにちは") == False
+
+    def is_partner_photo_recent(latest_partner_msg: str) -> bool:
+        if "📷" in latest_partner_msg:
+            return True
+        lower = latest_partner_msg.lower().strip()
+        return any(lower == w or "写真を送信しました" in lower for w in photo_words)
+
+    # Casual conversation mentioning '写真' must NOT trigger photo reaction!
+    assert is_partner_photo_recent("写真立て買ったんだよね！") == False, "Mentioning '写真立て' must NOT trigger photo reaction!"
+    assert is_partner_photo_recent("昨日の写真撮るの忘れたー") == False, "Mentioning '写真撮るの忘れた' must NOT trigger photo reaction!"
+    assert is_partner_photo_recent("📷 [写真を送信しました]") == True
+    assert is_partner_photo_recent("写真を送信しました") == True
 
     # Verify prompt guidance when photo is present
     has_photo = True
@@ -437,15 +452,24 @@ def test_kanagawa_atsugi_chigasaki_localization():
     # User base MUST be Kanagawa (Atsugi, Chigasaki, Shonan)
     assert "厚木市・茅ヶ崎市・湘南エリア在住" in persona_code, "Prompt MUST specify user residence in Atsugi/Chigasaki/Shonan!"
     assert "東京（渋谷・新宿・恵比寿・六本木など）を勝手に提案することは【完全禁止】" in persona_code, "Prompt MUST strictly forbid proposing Tokyo!"
+    assert "渋谷か恵比寿あたり" not in persona_code, "Fallback must NOT suggest Shibuya/Ebisu!"
+    assert "Shibuya or Ebisu" not in persona_code, "English fallback must NOT suggest Shibuya/Ebisu!"
 
     with open("app/src/main/java/com/antigravity/lineaireply/plugin/ConversationMemoryPlugin.kt") as f:
         memory_code = f.read()
 
-    # Default location must NOT be Tokyo
-    assert "神奈川・湘南（厚木・茅ヶ崎エリア）" in memory_code, "Default partner/user location must be Kanagawa/Shonan!"
+    # Default partner location must be '不明' (NOT assuming partner also lives in Atsugi!)
+    assert '"location", "不明"' in memory_code, "Partner dossier default location must be '不明'!"
+    assert 'detectLocations(combined).ifEmpty { "不明" }' in memory_code
     assert "茅ヶ崎で海見ながらカフェ行こー☕️" in memory_code
     assert "厚木か海老名あたりで美味いもん食べよ！" in memory_code
     assert "渋谷で肉食べよー🥩" not in memory_code, "Tokyo sample '渋谷で肉食べよー' MUST be completely removed!"
+
+    with open("app/src/main/java/com/antigravity/lineaireply/ai/SmartChatAssistant.kt") as f:
+        assistant_code = f.read()
+    assert "渋谷で肉食べよー" not in assistant_code
+    assert 'location = "都内近郊"' not in assistant_code
+    assert 'location = "不明"' in assistant_code
 
     print("Kanagawa (Atsugi / Chigasaki) localization & anti-Tokyo suite: PASS ✅")
 
@@ -495,6 +519,12 @@ def test_bubble_dismiss_and_keyboard_hiding():
         layout_text = f.read()
     assert "btnBubbleClose" in layout_text, "Bubble layout MUST have btnBubbleClose!"
 
+    # 3. Check Service code uses window API for IME detection and Dispatchers.Default for safety watcher
+    with open("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt") as f:
+        service_code = f.read()
+    assert "AccessibilityWindowInfo.TYPE_INPUT_METHOD" in service_code, "Must use TYPE_INPUT_METHOD window detection!"
+    assert "Dispatchers.Default" in service_code, "Safety watcher must run on Dispatchers.Default!"
+
     print("Bubble manual dismiss, keyboard auto-hide & settings toggle suite: PASS ✅")
 
 def main():
@@ -512,7 +542,7 @@ def main():
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    print("All loop engineering v1.5.4 tests: 100% PASSED! 🚀")
+    print("All loop engineering v1.5.5 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()
