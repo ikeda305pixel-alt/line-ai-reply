@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.graphics.Rect
 import android.widget.Toast
 import com.antigravity.lineaireply.ai.ChatConversationExtractor
 import com.antigravity.lineaireply.ai.ChatContext
