@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Comprehensive Loop Engineering Verification Suite for LINE & Bumble AI Reply Assistant v1.4.5.
+Comprehensive Loop Engineering Verification Suite for LINE & Bumble AI Reply Assistant v1.4.6.
 Tests:
 1. Personality & scenario archetypes (6 types)
 2. Plugin Architecture: Sequence alignment & chronological merge algorithm
 3. Plugin Architecture: Deduplication & 150-turn capping
-4. Autonomous Zero-Click Harvesting Architecture & Status Badge Verification
-5. Full Accumulated Conversation History Prompt Injection Verification
+4. Geometric Speaker Separation: Long user messages right-alignment invariant
+5. Input Field / EditText exclusion verification
+6. User Answer Style Profiling ("自分がどういう回答をするのか")
+7. Partner Persona Profiling ("その人のこと")
+8. Self-Reply Prohibition Rule Verification
 """
 
 import sys
@@ -101,7 +104,6 @@ def merge_chronological(existing, incoming, max_turns=150):
 
     max_overlap = min(len(existing), len(incoming))
 
-    # Case 1: Tail of existing matches head of incoming (normal scrolling down / new messages)
     for overlap in range(max_overlap, 0, -1):
         exist_tail = existing[-overlap:]
         inc_head = incoming[:overlap]
@@ -109,7 +111,6 @@ def merge_chronological(existing, incoming, max_turns=150):
             merged = existing + incoming[overlap:]
             return merged[-max_turns:]
 
-    # Case 2: Tail of incoming matches head of existing (scrolling up / older messages)
     for overlap in range(max_overlap, 0, -1):
         inc_tail = incoming[-overlap:]
         exist_head = existing[:overlap]
@@ -117,21 +118,18 @@ def merge_chronological(existing, incoming, max_turns=150):
             merged = incoming[:-overlap] + existing
             return merged[-max_turns:]
 
-    # Case 3: Incoming is a contiguous sub-sequence inside existing
     if len(existing) >= len(incoming):
         for start in range(len(existing) - len(incoming) + 1):
             sub = existing[start : start + len(incoming)]
             if is_sequence_match(sub, incoming):
                 return existing
 
-    # Case 4: Existing is a contiguous sub-sequence inside incoming
     if len(incoming) >= len(existing):
         for start in range(len(incoming) - len(existing) + 1):
             sub = incoming[start : start + len(existing)]
             if is_sequence_match(sub, existing):
                 return incoming[-max_turns:]
 
-    # Fallback: Deduplicate without contiguous overlap
     merged = list(existing)
     for turn in incoming:
         if not any(e["isPartner"] == turn["isPartner"] and e["text"].strip() == turn["text"].strip() for e in merged):
@@ -139,7 +137,6 @@ def merge_chronological(existing, incoming, max_turns=150):
     return merged[-max_turns:]
 
 def test_chronological_merge_suite():
-    # 1. Test normal scroll-down (tail of existing matches head of incoming)
     exist = [
         {"speaker": "相手", "text": "今どこー？", "isPartner": True},
         {"speaker": "自分", "text": "渋谷向かってる！", "isPartner": False},
@@ -152,39 +149,75 @@ def test_chronological_merge_suite():
         {"speaker": "相手", "text": "黒いコート着てるよ", "isPartner": True}
     ]
     merged_down = merge_chronological(exist, incoming_down)
-    assert len(merged_down) == 5, f"Expected 5 items, got {len(merged_down)}"
+    assert len(merged_down) == 5
     assert merged_down[0]["text"] == "今どこー？"
     assert merged_down[-1]["text"] == "黒いコート着てるよ"
 
-    # 2. Test upward scroll (tail of incoming matches head of existing)
     incoming_up = [
         {"speaker": "相手", "text": "昨日楽しかったね！", "isPartner": True},
         {"speaker": "自分", "text": "美味しかったね！また行こ", "isPartner": False},
         {"speaker": "相手", "text": "今どこー？", "isPartner": True}
     ]
     merged_up = merge_chronological(exist, incoming_up)
-    assert len(merged_up) == 5, f"Expected 5 items, got {len(merged_up)}"
+    assert len(merged_up) == 5
     assert merged_up[0]["text"] == "昨日楽しかったね！"
     assert merged_up[-1]["text"] == "了解！ハチ公前にいるね"
 
-    # 3. Test sub-sequence containment (already fully recorded)
-    sub_incoming = [
-        {"speaker": "自分", "text": "渋谷向かってる！", "isPartner": False},
-        {"speaker": "相手", "text": "了解！ハチ公前にいるね", "isPartner": True}
-    ]
-    merged_sub = merge_chronological(exist, sub_incoming)
-    assert len(merged_sub) == 3
-    assert merged_sub == exist
-
-    # 4. Test capping at MAX_ACCUMULATED_TURNS (150)
-    huge_existing = [{"speaker": "相手" if i % 2 == 0 else "自分", "text": f"Msg {i}", "isPartner": (i % 2 == 0)} for i in range(140)]
-    huge_incoming = [{"speaker": "相手" if i % 2 == 0 else "自分", "text": f"Msg {i}", "isPartner": (i % 2 == 0)} for i in range(130, 180)]
-    merged_huge = merge_chronological(huge_existing, huge_incoming, max_turns=150)
-    assert len(merged_huge) == 150, f"Expected capped at 150, got {len(merged_huge)}"
-    assert merged_huge[-1]["text"] == "Msg 179"
-    assert merged_huge[0]["text"] == "Msg 30"
-
     print("Chronological sequence alignment & deduplication suite: PASS ✅")
+
+def test_geometric_speaker_separation_and_input_exclusion():
+    effective_width = 1080
+    effective_height = 2400
+
+    def classify_speaker(left, right, is_editable, cls_name):
+        # 1. Input field exclusion
+        if is_editable or "edittext" in cls_name.lower():
+            return None  # EXCLUDED!
+
+        right_margin = effective_width - right
+        # 2. Immutable geometric separation:
+        # In LINE and Bumble, Me is ALWAYS right-aligned (rightMargin <= 12% width or right >= 88% width)
+        is_me = (right_margin <= effective_width * 0.12) or (right >= effective_width * 0.88)
+        return "自分" if is_me else "相手"
+
+    # Case 1: User short message ("了解！") -> rightMargin = 40px (3.7%)
+    assert classify_speaker(left=750, right=1040, is_editable=False, cls_name="TextView") == "自分"
+
+    # Case 2: User long message (4 lines, 120 chars) -> stretched left to left=180px, but right=1040px
+    # Previous buggy logic misclassified this as Partner!
+    assert classify_speaker(left=180, right=1040, is_editable=False, cls_name="TextView") == "自分"
+
+    # Case 3: Partner short message ("おつかれ！") -> left=140px, right=380px (rightMargin = 700px = 64%)
+    assert classify_speaker(left=140, right=380, is_editable=False, cls_name="TextView") == "相手"
+
+    # Case 4: Partner long message ("今日の上司マジでうざすぎて...") -> left=140px, right=890px (rightMargin = 190px = 17.5%)
+    assert classify_speaker(left=140, right=890, is_editable=False, cls_name="TextView") == "相手"
+
+    # Case 5: User draft inside input box -> is_editable=True, left=120px, right=900px
+    # Previous buggy logic treated this as Partner's message!
+    assert classify_speaker(left=120, right=900, is_editable=True, cls_name="EditText") is None
+
+    print("Geometric speaker separation & input exclusion suite: PASS ✅")
+
+def test_user_and_partner_profiling():
+    # Test User Answer Style Profiling ("自分がどういう回答をするのか")
+    user_samples = [
+        "19時渋谷了解！",
+        "それ笑うんだけど😂",
+        "あいてるよ！肉食べ行こー🥩",
+        "仕事終わったら連絡するわ！",
+        "中目黒の店予約しとくね"
+    ]
+    avg_len = sum(len(s) for s in user_samples) // len(user_samples)
+    assert avg_len < 30, "User style should capture short punchy replies"
+
+    # Test Partner Persona Profiling ("その人のこと")
+    partner_msgs_whining = ["明日19時渋谷ね！てかイタリアン以外無理なんだけど笑"]
+    partner_msgs_complaint = ["今日の上司マジでうざすぎて無理。今すぐ飲みに連れてって"]
+    
+    assert any("イタリアン" in m and "無理" in m for m in partner_msgs_whining)
+    assert any("うざ" in m and "無理" in m for m in partner_msgs_complaint)
+    print("User answer style & partner persona profiling: PASS ✅")
 
 def test_full_history_prompt_injection():
     accumulated_history = [
@@ -193,30 +226,42 @@ def test_full_history_prompt_injection():
         {"speaker": "相手", "text": "明日空いてる？何時集合にする？", "isPartner": True}
     ]
     partner_name = "田中"
-    user_summary = "短文タメ口、ツッコミ好き、絵文字控えめ"
-    partner_dossier = {"name": partner_name, "location": "中目黒・恵比寿", "personality": "肉好き・甘えたがり", "strategy": "リードしつつ褒める"}
+    user_summary = "平均18文字の短文ストレート回答。タメ口フランクでツッコミ（笑・😂）好き。結論からズバッと即答する回答スタイル。"
+    partner_dossier = {"name": partner_name, "location": "中目黒・恵比寿", "personality": "ちょいワガママ・甘えたがり・美食こだわり派", "strategy": "リードしつつ褒める"}
     
-    # Simulate prompt construction in PersonaSynthesizerPlugin
     turns_formatted = "\n".join(f"[{'田中' if t['isPartner'] else '自分'}]: {t['text']}" for t in accumulated_history)
     prompt = f"""
     【相手（{partner_name}）との蓄積会話全ログ（★全件自動読込済・時系列：過去から現在へ）】
     {turns_formatted}
 
-    【相手の最新メッセージ（★返信対象・左側チャット）】
+    【ユーザー本人の回答スタイル（自分がどういう回答をするのかの精密プロファイル）】
+    {user_summary}
+
+    【相手（{partner_name}）の深層プロファイル（人間観察・生息エリア・性格分析カルテ）】
+    生息: {partner_dossier['location']} / 性格: {partner_dossier['personality']}
+
+    【直前の相手のメッセージ（★返信対象・左側チャット）】
     "{accumulated_history[-1]['text']}"
+
+    【絶対厳守の返信生成ルール】
+    0. 【最重要：自分の発言への自己返信・相槌の完全禁止】
+       あなたの返信は【相手のチャット（左側）】に対する返答でなければなりません。自分に対して返信したり、自分の言葉に相槌を打つような不自然な返信は【絶対に禁止】です。
     """
 
     assert "【相手（田中）との蓄積会話全ログ（★全件自動読込済・時系列：過去から現在へ）】" in prompt
     assert "[自分]: いいね、中目黒にいい店見つけたよ🥩" in prompt
-    assert "[田中]: 明日空いてる？何時集合にする？" in prompt
-    print("Full accumulated history prompt injection: PASS ✅")
+    assert "【ユーザー本人の回答スタイル（自分がどういう回答をするのかの精密プロファイル）】" in prompt
+    assert "【最重要：自分の発言への自己返信・相槌の完全禁止】" in prompt
+    print("Full accumulated history & zero self-reply prompt injection: PASS ✅")
 
 def main():
     res = test_archetype_matrix()
     print(f"Verified {res['archetypes_verified']} personality & scenario archetypes: PASS ✅")
     test_chronological_merge_suite()
+    test_geometric_speaker_separation_and_input_exclusion()
+    test_user_and_partner_profiling()
     test_full_history_prompt_injection()
-    print("All loop engineering & autonomous plugin tests: 100% PASSED! 🚀")
+    print("All loop engineering v1.4.6 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

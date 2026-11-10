@@ -87,42 +87,39 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
         val jsonArray = serializeTurnsToJson(merged)
         chatPrefs.edit().putString(key, jsonArray.toString()).apply()
 
-        // 2. Extract and learn user style quotes ("俺スタイル")
-        val myMessages = validIncoming.filter { !it.isPartner }.map { it.text.trim() }
-        if (myMessages.isNotEmpty()) {
+        // 2. Profile "自分がどういう回答をするのか" (User Answer Style Profiling)
+        val allUserTurns = merged.filter { !it.isPartner }.map { it.text.trim() }
+        if (allUserTurns.isNotEmpty()) {
             val currentSamples = getUserStyle().sampleQuotes.toMutableList()
             var added = false
-            for (m in myMessages) {
+            for (m in allUserTurns) {
                 if (!currentSamples.contains(m)) {
                     currentSamples.add(0, m)
                     added = true
                 }
             }
-            if (added) {
-                val trimmed = currentSamples.take(MAX_USER_SAMPLES)
-                metaPrefs.edit()
-                    .putString(KEY_USER_SAMPLES, trimmed.joinToString("|||"))
-                    .putInt(KEY_USER_LEARNED_COUNT, metaPrefs.getInt(KEY_USER_LEARNED_COUNT, 0) + myMessages.size)
-                    .apply()
-            }
+            val trimmed = currentSamples.take(MAX_USER_SAMPLES)
+            val dynamicUserSummary = profileUserAnswerStyle(trimmed)
+            metaPrefs.edit()
+                .putString(KEY_USER_SAMPLES, trimmed.joinToString("|||"))
+                .putString(KEY_USER_STYLE_SUMMARY, dynamicUserSummary)
+                .putInt(KEY_USER_LEARNED_COUNT, metaPrefs.getInt(KEY_USER_LEARNED_COUNT, 0) + (if (added) 1 else 0))
+                .apply()
         }
 
-        // 3. Update partner dossier stats and heuristic area detection
-        val partnerMessages = validIncoming.filter { it.isPartner }.map { it.text.trim() }
-        if (partnerMessages.isNotEmpty() && key != "default_partner") {
+        // 3. Profile "その人のこと" (Partner Persona, Location & Strategy Profiling)
+        val allPartnerTurns = merged.filter { it.isPartner }
+        if (allPartnerTurns.isNotEmpty() && key != "default_partner") {
             try {
+                val dossier = profilePartnerPersona(key, allPartnerTurns)
                 val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
                 val root = JSONObject(allDossiersJson)
-                val obj = if (root.has(key)) root.getJSONObject(key) else JSONObject()
-                val currentCount = obj.optInt("count", 0) + partnerMessages.size
-                obj.put("count", currentCount)
-
-                val combinedPartnerText = partnerMessages.joinToString(" ")
-                val detectedArea = detectLocations(combinedPartnerText)
-                if (detectedArea.isNotBlank() && !obj.has("location")) {
-                    obj.put("location", detectedArea)
+                val obj = JSONObject().apply {
+                    put("location", dossier.location)
+                    put("personality", dossier.personalityType)
+                    put("strategy", dossier.strategy)
+                    put("count", dossier.accumulatedMessageCount)
                 }
-
                 root.put(key, obj)
                 metaPrefs.edit().putString(KEY_PARTNER_DOSSIERS, root.toString()).apply()
             } catch (e: Exception) {
@@ -500,6 +497,82 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
             array.put(obj)
         }
         return array
+    }
+
+    private fun profileUserAnswerStyle(samples: List<String>): String {
+        if (samples.isEmpty()) {
+            return "フランクなタメ口。短文（15〜30文字）でテンポ重視。ツッコミや軽いイジりが好きで、絵文字は控えめ（😂や笑を多用）。ストレートで回りくどい言い回しを嫌う。"
+        }
+        val avgLen = samples.map { it.length }.average().toInt().coerceIn(12, 60)
+        val hasWarai = samples.count { it.contains("笑") || it.contains("😂") || it.contains("w") } >= (samples.size * 0.20)
+        val hasShortPunch = samples.count { it.length <= 25 } >= (samples.size * 0.40)
+        val hasDirectAnswers = samples.any { it.contains("時") || it.contains("行く") || it.contains("空いてる") || it.contains("了解") || it.contains("向かう") }
+
+        val parts = mutableListOf<String>()
+        if (hasShortPunch) {
+            parts.add("平均${avgLen}文字のテンポ重視・短文ストレート回答")
+        } else {
+            parts.add("平均${avgLen}文字の自然な会話テンポ")
+        }
+        parts.add("完全なタメ口・フランクな男らしい口調")
+        if (hasWarai) {
+            parts.add("語尾に『笑』や『😂』を自然に交えたクスッと笑えるツッコミ・軽快なノリ")
+        }
+        if (hasDirectAnswers) {
+            parts.add("質問に対して結論（時間・場所・可否）をズバッと即答し、曖昧に濁さない回答パターン")
+        } else {
+            parts.add("相手のテンションを肯定しつつ主導権を握る回答パターン")
+        }
+        return parts.joinToString("。") + "。"
+    }
+
+    private fun profilePartnerPersona(partnerName: String, partnerMessages: List<MessageTurn>): PartnerDossier {
+        val combined = partnerMessages.joinToString(" ") { it.text }
+        val detectedArea = detectLocations(combined).ifEmpty { "都内・行動圏探索中" }
+
+        val hasWhining = combined.contains(Regex("無理|嫌|〜して|今すぐ|わがまま|連れてって|おごって|ダメ"))
+        val hasComplaints = combined.contains(Regex("うざ|疲れた|最悪|聞いて|大変|死ぬ|きつい"))
+        val hasChara = combined.contains(Regex("飲む|テキーラ|酒|バー|六本木|朝まで|乾杯|酔っ払"))
+        val hasCautious = combined.contains(Regex("緊張|カフェ|ランチ|昼|安心|人見知り|急に|怖い"))
+        val hasGourmet = combined.contains(Regex("肉|イタリアン|パスタ|ピザ|寿司|ラーメン|美味|予約|ご飯|飯"))
+
+        val personality: String
+        val strategy: String
+
+        when {
+            hasWhining && hasGourmet -> {
+                personality = "ちょいワガママ・甘えたがり・美食こだわり派"
+                strategy = "相手のわがままを『可愛いじゃん笑』と受け止めつつ、美味しい人気店をスマートに予約してリードする"
+            }
+            hasComplaints -> {
+                personality = "感情爆発・めんどくさい構ってちゃん・愚痴共感求め"
+                strategy = "まずは『それは災難だったね！』と100%味方になって共感し、美味い飯や酒で発散させて機嫌を取る"
+            }
+            hasChara -> {
+                personality = "チャラい・ノリ優先・夜遊び好き"
+                strategy = "テンションを合わせ、テキーラや乾杯のノリに軽くツッコミを入れながらテンポよく合流を仕掛ける"
+            }
+            hasCautious -> {
+                personality = "警戒心強め・慎重・真面目派"
+                strategy = "無理に夜飲みに誘わず、明るい時間のオープンなカフェやランチを提案して安心感を最優先にする"
+            }
+            hasWhining -> {
+                personality = "ちょいワガママ・甘えたがり・マウント気味"
+                strategy = "相手の要求を軽くイジって笑いに変え、主導権を握りながら包容力を見せる"
+            }
+            else -> {
+                personality = "ノリ重視・感情表現豊か・リアクション好き"
+                strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす"
+            }
+        }
+
+        return PartnerDossier(
+            name = partnerName,
+            location = detectedArea,
+            personalityType = personality,
+            strategy = strategy,
+            accumulatedMessageCount = partnerMessages.size
+        )
     }
 
     private fun detectLocations(text: String): String {

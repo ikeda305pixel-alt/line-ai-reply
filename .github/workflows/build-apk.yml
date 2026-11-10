@@ -33,8 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.5.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.6.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -47,37 +46,33 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.5
-          name: LINE & Bumble AI Reply Assistant v1.4.5 (プラグイン最適化・会話ログ完全自動蓄積＆AI全注入版)
+          tag_name: v1.4.6
+          name: LINE & Bumble AI Reply Assistant v1.4.6 (自己返信完全根絶・読込範囲内自律遡り・回答＆相手精密プロファイル版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.4.5 (プラグイン最適化・完全自律ログ学習版)
+            ## LINE & Bumble AI返信アシスタント v1.4.6 (自己返信完全根絶・精密プロファイル版)
 
-            ### 🚀 【完全ゼロクリック】自律ログ収集アーキテクチャ
-            - **手動読込ボタンの完全撤廃**:
-              ユーザーがトーク画面を開く、スクロールする、会話するだけで、バックグラウンドで100%自動的にメッセージを検出・収集。
-            - **ステータスバッジ化**:
-              オーバーレイには「✅ ログ自動蓄積: ○件」とリアルタイム状態が表示され、ユーザーが手動で何かを押す必要は一切ありません。
+            ### 🎯 【P0バグ完全撃破】自分の回答に自分で返信する不具合の完全根絶
+            - **入力欄（EditText）のメッセージ混入を完全排除**:
+              下書き中の入力欄テキストが相手メッセージ（左側）と誤判定されていた根本原因を修正。入力エリアおよびEditTextノードをチャットメッセージ抽出対象から100%除外。
+            - **ユーザー長文（3行以上）の右寄せ不変量判定**:
+              ユーザーが長文を送って吹き出しが左に広がった場合でも、LINE/Bumbleの右寄せ不変特性（`rightMargin <= 12%` または `rect.right >= 88%`）により「自分」と確実に同定。相手と誤判定されるバグを根絶。
+            - **自己発言への相槌・自己返信をプロンプトレベルで完全禁止**:
+              直前の発言者が自分自身の場合を明確に検知し、自分の発言への相槌・自己返信を完全禁止。相手の直前発言への回答別案、または自然な追加フォローを提案。
 
-            ### 📚 【相手別・完全蓄積会話ログストア】
-            - **相手ごとの時系列全ログ永続化**:
-              各相手（LINE/Bumble）との過去の会話やり取り全履歴を、時系列順で最大150件までローカルに安全蓄積。
-            - **幾何学的・時系列重複排除**:
-              上下スクロールや画面再描画時の重複メッセージをシーケンスアラインメントで完全排除。
+            ### 📚 【読める範囲内での自律遡りスキャン】
+            - **トークルーム入室時のサイレント遡りスキャン**:
+              チャット画面を開いた瞬間、バックグラウンドで2画面分を自律スクロールして過去ログを漏れなく収集し、すぐ最新メッセージ位置へ復帰。
 
-            ### 🧠 【返信生成時の過去全ログ自動注入】
-            - **過去の会話コンテキストをAIが完全把握**:
-              画面上の高々10件だけでなく、過去に話した約束、好きな食べ物、エリア、内輪ノリなどの蓄積会話ログ（最大80件）をGeminiプロンプトに全自動注入。
-            - **最高精度の返信生成**:
-              過去の文脈と矛盾しない、圧倒的に自然で高EQな返信（🎯即答、🤝転がし、😄ツッコミ、🚀提案/LINE移行）を生成。
+            ### 🧠 【自分がどういう回答をするのかの精密プロファイル】
+            - **ユーザー回答スタイルの自動学習**:
+              蓄積された自分の全発言から、平均文字数、テンポ、語尾（〜わ、〜よ、〜じゃん、笑、😂）、結論ファースト即答パターンを自動分析してAIに注入。
 
-            ### 🧩 【プラグイン型モジュール設計】
-            - `IConversationHarvesterPlugin`: 幾何学的話者分離・プロフ抽出
-            - `IConversationMemoryPlugin`: 相手別時系列蓄積ストア・俺スタイル学習
-            - `IPersonaSynthesizerPlugin`: 過去ログ統合プロンプト合成・レスポンス解析
-            - `IDynamicModelRouterPlugin`: ListModels API動的検知・自動フォールバック
+            ### 👤 【その人のこともプロファイル（性格・生息地カルテ）】
+            - **相手の性格タイプ自動分析**:
+              相手の全発言から、わがまま・めんどくさい構ってちゃん・チャラい・警戒心強めなどの性格傾向と生息エリアを自動プロファイリングし、相手を転がす最適戦略を策定。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.5.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.6.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -19,6 +19,7 @@ data class ChatContext(
     val allMessageTurns: List<MessageTurn> = emptyList(),
     val latestPartnerMessage: String,
     val latestMyMessage: String,
+    val lastMessageIsMe: Boolean = false,
     val profileSnippet: String,
     val isEnglishPartner: Boolean,
     val languageDesc: String,
@@ -93,6 +94,9 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val effectiveHeight = if (screenHeight > 0) screenHeight else 2400
 
         val inputNode = findInputEditText(rootNode)
+        val inputRect = Rect()
+        inputNode?.getBoundsInScreen(inputRect)
+        val inputTopBound = if (inputRect.top > 0) inputRect.top else (effectiveHeight * 0.88).toInt()
 
         // 1. Extract Partner Name from top header
         val partnerName = extractHeaderTitle(rootNode, effectiveHeight)
@@ -106,9 +110,9 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         }
         val finalProfile = if (visibleProfile.isNotBlank()) visibleProfile else cachedBumbleProfile
 
-        // 3. Extract Message Nodes with spatial bounding boxes
+        // 3. Extract Message Nodes with spatial bounding boxes (strictly above the input field)
         val rawCandidates = mutableListOf<RawTextNode>()
-        traverseChatNodes(rootNode, rawCandidates, effectiveWidth, effectiveHeight)
+        traverseChatNodes(rootNode, rawCandidates, effectiveWidth, effectiveHeight, inputTopBound)
 
         // Deduplicate parent-child identical texts within close vertical coordinates
         val deduplicated = mutableListOf<RawTextNode>()
@@ -124,10 +128,12 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         // Sort chronologically by vertical screen position (top to bottom)
         val sortedNodes = deduplicated.sortedBy { it.rect.top }
 
-        // Classify speaker strictly based on screen layout:
+        // Classify speaker strictly based on immutable screen layout:
         // In LINE and Bumble:
-        // - Right side (自分/Me): Right margin is small (< 15% width), left margin is large (> 15% width), centerX is on the right (> 45% width).
-        // - Left side (相手/Partner): Left margin is small (< 25% width, next to avatar), right margin is large (> 15% width), centerX is on the left (< 55% width).
+        // - Right side (自分/Me): Right margin is small (rightMargin <= 12% width) and rect.right >= 88% width.
+        //   Even when the user's message is 3-4 lines long and stretches to the left, rect.right is ALWAYS flush right.
+        // - Left side (相手/Partner): Starts on the left (rect.left <= 25% width, next to avatar icon)
+        //   and NEVER reaches the right margin (rightMargin > 12% width, reserved for timestamps/read receipts).
         val messageTurns = mutableListOf<MessageTurn>()
         for (node in sortedNodes) {
             val rect = node.rect
@@ -141,14 +147,9 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             }
 
             val rightMargin = effectiveWidth - rect.right
-            val leftMargin = rect.left
 
-            // Classify speaker based on screen layout:
-            // Partner (Left side): Must start near the left margin (rect.left <= 24% screen width, next to avatar icon).
-            // User (Right side): Has timestamp/read-receipt on the left (rect.left > 24%), flush against right edge.
-            val isPartner = (rect.left <= effectiveWidth * 0.24) ||
-                            (leftMargin < rightMargin && rect.left < effectiveWidth * 0.35)
-            val isMe = !isPartner
+            val isMe = (rightMargin <= effectiveWidth * 0.12) || (rect.right >= effectiveWidth * 0.88)
+            val isPartner = !isMe
 
             messageTurns.add(
                 MessageTurn(
@@ -169,9 +170,12 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
         // STRICT TARGETING:
         // The reply MUST answer the partner's chat (Left side), NEVER the user's own message (Right side)!
-        // If partnerTurns exists, strictly use partnerTurns.last().
-        val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: messageTurns.firstOrNull { it.isPartner }?.text ?: ""
+        val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: ""
         val latestMyMessage = myTurns.lastOrNull()?.text ?: ""
+
+        // Check if the latest message on screen was sent by Me
+        val lastTurn = messageTurns.lastOrNull()
+        val lastMessageIsMe = lastTurn != null && !lastTurn.isPartner
 
         val combinedSample = (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
         val (isForeignOrEnglish, languageDesc) = detectLanguageBackground(combinedSample, finalProfile)
@@ -187,6 +191,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             allMessageTurns = messageTurns,
             latestPartnerMessage = latestPartnerMessage,
             latestMyMessage = latestMyMessage,
+            lastMessageIsMe = lastMessageIsMe,
             profileSnippet = finalProfile,
             isEnglishPartner = isForeignOrEnglish,
             languageDesc = languageDesc,
@@ -271,13 +276,25 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         node: AccessibilityNodeInfo,
         list: MutableList<RawTextNode>,
         screenWidth: Int,
-        screenHeight: Int
+        screenHeight: Int,
+        inputTopBound: Int = -1
     ) {
         val rect = Rect()
         node.getBoundsInScreen(rect)
 
+        val cls = node.className?.toString() ?: ""
+        // CRITICAL FIX: EXCLUDE INPUT FIELDS, EDITTEXT, AND USER DRAFTS COMPLETELY!
+        if (node.isEditable || cls.contains("EditText", ignoreCase = true)) {
+            return
+        }
+
+        // Exclude anything in the input bar or below it (stickers, send button, keyboard)
+        if (inputTopBound > 0 && rect.top >= inputTopBound) {
+            return
+        }
+
         val topBound = (screenHeight * 0.08).toInt()
-        val bottomBound = (screenHeight * 0.90).toInt()
+        val bottomBound = if (inputTopBound > 0) (inputTopBound - 8) else (screenHeight * 0.88).toInt()
 
         val isInMessageArea = rect.top >= topBound && rect.bottom <= bottomBound
         val rawText = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
@@ -290,7 +307,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         }
 
         for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { traverseChatNodes(it, list, screenWidth, screenHeight) }
+            node.getChild(i)?.let { traverseChatNodes(it, list, screenWidth, screenHeight, inputTopBound) }
         }
     }
 

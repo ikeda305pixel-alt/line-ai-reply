@@ -84,32 +84,108 @@ class LineAccessibilityService : AccessibilityService() {
             }
 
             // Autonomous zero-click continuous background harvesting:
-            // Triggers whenever chat is opened, scrolled, or updated
-            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-                event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
-                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                autonomousQuickHistoryHarvest(pkg)
+            } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+                       event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             ) {
                 harvestCurrentScreenAsync(pkg)
             }
 
-            // Also trigger if user taps directly on a message bubble in chat (strictly partner side)
+            // Also trigger if user taps directly on a partner message bubble on the left
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val source = event.source
-                val clickedText = source?.text?.toString()?.trim() ?: ""
-                if (clickedText.length in 2..200) {
-                    val root = rootInActiveWindow
+                val cls = source?.className?.toString() ?: ""
+                // STRICT CHECK: Never treat input field / EditText or user right-side messages as partner click!
+                if (source != null && !source.isEditable && !cls.contains("EditText", ignoreCase = true)) {
+                    val rect = android.graphics.Rect()
+                    source.getBoundsInScreen(rect)
                     val metrics = resources.displayMetrics
-                    val chatContext = ChatConversationExtractor.extract(
-                        root, pkg, metrics.widthPixels, metrics.heightPixels
-                    )
-                    if (chatContext != null) {
-                        triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
+                    val effectiveWidth = metrics.widthPixels
+                    val rightMargin = effectiveWidth - rect.right
+                    // ONLY allow left side (Partner message, rightMargin > 15% width)!
+                    if (rightMargin > effectiveWidth * 0.15) {
+                        val clickedText = source.text?.toString()?.trim() ?: ""
+                        if (clickedText.length in 2..200) {
+                            val root = rootInActiveWindow
+                            val chatContext = ChatConversationExtractor.extract(
+                                root, pkg, metrics.widthPixels, metrics.heightPixels
+                            )
+                            if (chatContext != null) {
+                                triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
+                            }
+                        }
                     }
                 }
             }
         } else {
             // User switched to another app (Home, Chrome, etc.)
             overlayManager.hideAll()
+        }
+    }
+
+    private var lastAutoScanRoom = ""
+    private var lastAutoScanTimestamp = 0L
+
+    /**
+     * Silently and autonomously harvests readable conversation history when a chat room is opened.
+     */
+    private fun autonomousQuickHistoryHarvest(pkg: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastAutoScanTimestamp < 4000) return
+
+        serviceScope.launch(Dispatchers.Main) {
+            val root = rootInActiveWindow ?: return@launch
+            val metrics = resources.displayMetrics
+            val initialContext = ChatConversationExtractor.extract(
+                root, pkg, metrics.widthPixels, metrics.heightPixels
+            ) ?: return@launch
+
+            val partnerName = initialContext.partnerName
+            if (partnerName.isBlank() || partnerName == lastAutoScanRoom) {
+                val turns = initialContext.allMessageTurns.ifEmpty { initialContext.conversationHistory }
+                if (turns.isNotEmpty()) {
+                    memoryManager.recordScreenTurns(partnerName, turns)
+                }
+                return@launch
+            }
+
+            lastAutoScanRoom = partnerName
+            lastAutoScanTimestamp = now
+
+            // 1. Record current screen immediately
+            val initialTurns = initialContext.allMessageTurns.ifEmpty { initialContext.conversationHistory }
+            if (initialTurns.isNotEmpty()) {
+                memoryManager.recordScreenTurns(partnerName, initialTurns)
+            }
+
+            // 2. Silently scroll up 2 times to capture previous readable history
+            for (step in 1..2) {
+                val scrollable = findScrollableNode(rootInActiveWindow)
+                val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) ?: false
+                if (!scrolled) break
+                kotlinx.coroutines.delay(200)
+                val upRoot = rootInActiveWindow
+                if (upRoot != null) {
+                    val upContext = ChatConversationExtractor.extract(
+                        upRoot, pkg, metrics.widthPixels, metrics.heightPixels
+                    )
+                    if (upContext != null) {
+                        val upTurns = upContext.allMessageTurns.ifEmpty { upContext.conversationHistory }
+                        if (upTurns.isNotEmpty()) {
+                            memoryManager.recordScreenTurns(partnerName, upTurns)
+                        }
+                    }
+                }
+            }
+
+            // 3. Scroll back down to return to the bottom of the conversation
+            for (step in 1..2) {
+                val scrollable = findScrollableNode(rootInActiveWindow)
+                val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ?: false
+                if (!scrolled) break
+                kotlinx.coroutines.delay(100)
+            }
         }
     }
 
