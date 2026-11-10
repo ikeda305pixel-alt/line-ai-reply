@@ -45,7 +45,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
         }
 
         val historyText = if (allTurns.isNotEmpty()) {
-            val turnsToInclude = allTurns.takeLast(120)
+            val turnsToInclude = allTurns.takeLast(240)
             turnsToInclude.joinToString("\n") { turn ->
                 val spk = if (turn.isPartner) (context.partnerName.ifEmpty { "相手" }) else "自分"
                 "[$spk]: ${turn.text}"
@@ -56,10 +56,21 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
         val profileSection = if (context.profileSnippet.isNotBlank()) {
             """
-            【相手のプロフィール・自己紹介・プロンプト情報】
+            【相手（$partnerResolvedName）のプロフィール・自己紹介・プロンプト情報（★最重要参照データ）】
             ${context.profileSnippet}
+
+            ★【最重要・会話成立ルール：相手のプロフィールへの言及義務】
+            マッチングアプリ（Bumble）では、相手のプロフィール（趣味、仕事、休日の過ごし方、生活圏、写真など）に具体的に触れてリアクションしないと【絶対に会話が成立しません】！
+            「あいてるよ！」「肉食べよ」等の当たり障りのない定型文や、プロフを無視したチャラいナンパは【完全禁止】です！
+            相手のプロフィールに書かれている話題（カフェ、サウナ、映画、旅行、仕事、ペットなど）や直前の発言を必ず拾い、
+            「プロフ見ました！〇〇好きなんですね！」「〇〇されてるんですね！」など、相手のプロフィールに自然に興味を示して共感し、会話を盛り上げる返信案を作成してください！
             """.trimIndent()
-        } else ""
+        } else {
+            """
+            【相手のプロフィール情報】
+            （※未取得または未記載。直前の会話ログから相手の話題・テンポを拾って自然に話を広げてください）
+            """.trimIndent()
+        }
 
         val userSamplesText = userStyle.sampleQuotes.take(10).joinToString("\n") { "  ・$it" }
         val partnerResolvedName = context.partnerName.ifEmpty { partnerDossier.name.ifEmpty { "相手" } }
@@ -144,23 +155,38 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             """.trimIndent() else """
             1. 【チャラさゼロ × トーン同期】
                安っぽい褒め言葉やホスト風の転がしは一切不要です。
-               ${if (context.isPartnerPolite) "相手が敬語なので、こちらも礼儀正しく好印象な敬語（です・ます調）で返信してください。" else "ユーザー本人の文体サンプルに忠実な、等身大で親しみやすい口調にしてください。"}
+               ${if (context.isPartnerPolite) "相手が敬語なので、こちらも礼儀正しく好印象な敬語（丁寧語：です・ます調）で返信案を作成してください。馴れ馴れしいタメ口は厳禁です。" else "ユーザー本人の文体サンプルに忠実な、等身大で親しみやすい口調にしてください。"}
             2. 【蓄積全ログの文脈理解＆神奈川ローカル配慮】
-               蓄積された過去全ログを理解し、前に話した話題や好みを自然に踏まえてください。
+               蓄積された過去全ログ（2倍スパン）を深く理解し、前に話した話題や好みを自然に踏まえてください。
                場所の話題では、厚木・茅ヶ崎・湘南・海老名・藤沢・横浜など神奈川県内を前提とし、東京の提案は禁止です。
-            3. 【4つの異なる俺流バリエーション】
-               - 案1 🎯【俺流・即答】: 自然体でド直球の好印象な即答（相手が敬語なら敬語、写真なら写真リアクション）。
-               - 案2 ☕️【俺流・共感質問】: 相手の話題・プロフ（場所含む）に共感しつつ自然に広げる逆質問。
-               - 案3 😄【俺流・ツッコミ】: ギャップや話題にクスッと笑えるウィットなイジり（敬語でも品のあるユーモア）。
+            3. 【4つの異なるバリエーション】
+               ${if (context.isPartnerPolite) """
+               - 案1 🎯【丁寧・即答】: 自然体でド直球の好印象な丁寧返答（相手が敬語なら敬語、写真なら写真リアクション）。
+               - 案2 ☕️【丁寧・プロフ共感】: 相手のプロフ・話題に具体的に触れて共感し、話を自然に広げる丁寧な逆質問。
+               - 案3 😄【丁寧・ウィット】: 品のある大人のユーモアやクスッと笑える好印象な返し。
+               - 案4 ${if (shouldInvite) "📲【丁寧・LINEご案内】" else "🚀【丁寧・爽やか提案】"}: ${if (shouldInvite) "以下のLINE移行文を丁寧に提示：\n「もしよろしければLINEでもお話ししませんか？✨ $JA_LINE_INVITE」" else "相手の生活圏を踏まえた神奈川（厚木・海老名・茅ヶ崎・藤沢・横浜等）のサクッと気軽なお茶・ご飯のご提案。"}
+
+               出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+               [
+                 {"label": "🎯 丁寧・即答", "text": "（丁寧な好印象即答）"},
+                 {"label": "☕️ 丁寧・プロフ共感", "text": "（プロフに触れて話を広げる丁寧な質問）"},
+                 {"label": "😄 丁寧・ウィット", "text": "（品のある好印象なユーモア）"},
+                 {"label": "${if (shouldInvite) "📲 LINEご案内" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) JA_LINE_INVITE else "（神奈川エリアの気軽な提案）"}"}
+               ]
+               """.trimIndent() else """
+               - 案1 🎯【俺流・即答】: 自然体でド直球の好印象な即答（写真なら写真リアクション）。
+               - 案2 ☕️【俺流・プロフ共感】: 相手の話題・プロフ（場所含む）に共感しつつ自然に広げる逆質問。
+               - 案3 😄【俺流・ツッコミ】: ギャップや話題にクスッと笑えるウィットなイジり。
                - 案4 ${if (shouldInvite) "📲【俺流・LINE交換】" else "🚀【俺流・爽やか提案】"}: ${if (shouldInvite) "以下のLINE移行文（リンク付き）を自然に提示：\n「$JA_LINE_INVITE」" else "相手の生活圏を踏まえた神奈川（厚木・海老名・茅ヶ崎・藤沢・横浜等）のサクッと気軽なお茶・ご飯の提案。"}
 
-            出力は以下のJSON配列のみ（Markdownコードブロック不要）：
-            [
-              {"label": "🎯 俺流・即答", "text": "（自然体でド直球の好印象な即答）"},
-              {"label": "☕️ 俺流・共感質問", "text": "（共感して話題を広げる逆質問）"},
-              {"label": "😄 俺流・ツッコミ", "text": "（爽やかなイジり・笑い）"},
-              {"label": "${if (shouldInvite) "📲 LINE交換" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) JA_LINE_INVITE else "（神奈川エリアの気軽な提案）"}"}
-            ]
+               出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+               [
+                 {"label": "🎯 俺流・即答", "text": "（自然体でド直球の好印象な即答）"},
+                 {"label": "☕️ 俺流・プロフ共感", "text": "（プロフに触れて話題を広げる逆質問）"},
+                 {"label": "😄 俺流・ツッコミ", "text": "（爽やかなイジり・笑い）"},
+                 {"label": "${if (shouldInvite) "📲 LINE交換" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) JA_LINE_INVITE else "（神奈川エリアの気軽な提案）"}"}
+               ]
+               """.trimIndent()}
             """.trimIndent()}
             """.trimIndent()
         } else {
@@ -169,7 +195,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             あなたは【ユーザー本人（俺）そのもの】です。
             ここはLINEのトーク画面です。相手は【友達・家族・同僚・知り合い】などの日常の人間関係です。
             チャラい発言、思わせぶりな態度、ホスト風の転がし、キザな恋愛工学は【完全永久追放】です。
-            友達や家族に送っても1ミリも不自然さのない、100%等身大の「俺流（タメ口、短文、テンポ、飾らない親近感）」で、人間が日常チャットで最も必要とする【4大基本パターン（YES系、NO系、質問調整系、ツッコミ共感系）】の返信案を作成してください。
+            ${if (context.isPartnerPolite) "相手が敬語・丁寧語のため、失礼のない好印象で親しみやすい丁寧語（です・ます調）で、日常チャットで最も必要とする【4大基本パターン（YES系、NO系、質問調整系、共感系）】の返信案を作成してください。馴れ馴れしいタメ口は厳禁です。" else "友達や家族に送っても1ミリも不自然さのない、100%等身大の「俺流（タメ口、短文、テンポ、飾らない親近感）」で、人間が日常チャットで最も必要とする【4大基本パターン（YES系、NO系、質問調整系、ツッコミ共感系）】の返信案を作成してください。"}
 
             【ユーザー本人の拠点・生活圏】
             - ユーザーの生活拠点: 神奈川県（厚木市・茅ヶ崎市・湘南エリア在住）
@@ -242,9 +268,30 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
               {"label": "😄 Humor / Reaction", "text": "(Warm casual banter or reaction in natural English)"}
             ]
             """.trimIndent() else """
+            ${if (context.isPartnerPolite) """
+            2. 【丁寧語（です・ます調）の徹底】
+               相手が敬語でメッセージを送っているため、4案すべて【好印象で親しみやすい丁寧語（です・ます調）】で作成してください。失礼な馴れ馴れしいタメ口は【完全禁止】です！
+            3. 【4大基本パターンの網羅（丁寧語）】
+               - 案1 🎯【丁寧・即答（YES / 承諾）】:
+                 承諾、合意、快諾、感謝など、相手の提案・誘い・質問に「YES」と好印象に答える返答。（例:「ぜひ！行きましょう！」「了解です！ありがとうございます」「助かります！」）
+               - 案2 🙅‍♂️【丁寧・代案（NO / 条件付き）】:
+                 角を立てずに丁寧に断る、または別の日程や場所を提案する。（例:「あいにくその日は先約がありまして…！来週のご都合はいかがでしょうか？」「今少しバタバタしておりまして、落ち着いたらご連絡しますね！」）
+               - 案3 💬【丁寧・質問調整】:
+                 話や予定を具体的に進めるための丁寧な時間・場所・詳細の質問や日程調整。（例:「何時頃がご都合よろしいでしょうか？」「どのあたりのお店にしましょうか？」「何系がお好きですか？」）
+               - 案4 😄【丁寧・共感ノリ良く】:
+                 相手の話題に気持ちよく共感し、クスッと笑えたり会話が弾むポジティブな返し。（例:「それすごくよく分かります笑！」「さすがですね！今日もお仕事お疲れ様でした✨」）
+
+            出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+            [
+              {"label": "🎯 丁寧・即答", "text": "（丁寧なYES/承諾の返答）"},
+              {"label": "🙅‍♂️ 丁寧・代案", "text": "（丁寧なNO/別日程・条件の提案）"},
+              {"label": "💬 丁寧・質問調整", "text": "（丁寧な時間・場所・詳細の質問）"},
+              {"label": "😄 丁寧・共感ノリ良く", "text": "（丁寧で好印象な共感や労い）"}
+            ]
+            """.trimIndent() else """
             2. 【全部「俺流」のトーン＆マナー】
-               4案すべてが「ユーザー本人が実際にLINEで送るリアルな言葉遣い（短文・語尾・ツッコミ・テンポ）」でなければなりません。優等生AIのような敬語や定型文は【完全禁止】です。
-            3. 【4大基本パターンの網羅】
+               相手がフランクなため、4案すべて「ユーザー本人が実際にLINEで送るリアルな言葉遣い（短文・語尾・ツッコミ・テンポ）」で作成してください。
+            3. 【4大基本パターンの網羅（俺流）】
                - 案1 🎯【俺流・即答（YES / 了解）】:
                  承諾、合意、快諾、感謝など、相手の提案・誘い・質問に「YES」とド直球に答える返答。（例:「おけ！行こ！」「了解〜！」「助かる、ありがとう！」）
                - 案2 🙅‍♂️【俺流・代案（NO / 条件付き）】:
@@ -261,6 +308,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
               {"label": "💬 俺流・質問調整", "text": "（時間・場所・詳細の質問）"},
               {"label": "😄 俺流・ツッコミ共感", "text": "（クスッと笑えるツッコミや労い）"}
             ]
+            """.trimIndent()}
             """.trimIndent()}
             """.trimIndent()
         }
@@ -441,34 +489,67 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
             }
         }
 
+        val isPolite = context.isPartnerPolite
         if (context.isPartnerPhotoRecent) {
-            return listOf(
-                SmartReplyOption("📸 写真リアクション", "写真ありがとう！めっちゃいいねこれ📸"),
-                SmartReplyOption("💬 写真の質問", "これどこで撮ったやつ？めちゃくちゃ雰囲気いいじゃん！"),
-                SmartReplyOption("😄 俺流ツッコミ", "映えまくってて笑った😂 センス良すぎ！"),
-                SmartReplyOption("🎯 ポジティブ共感", "楽しそうなの伝わってくるわ〜！最高😊")
-            )
+            return if (isPolite) {
+                listOf(
+                    SmartReplyOption("📸 写真リアクション", "お写真ありがとうございます！すごく素敵ですね✨"),
+                    SmartReplyOption("💬 写真の質問", "これどこで撮られたんですか？雰囲気めちゃくちゃ良いですね！"),
+                    SmartReplyOption("😄 丁寧・共感ノリ良く", "すごく映えてますね！センス抜群です笑"),
+                    SmartReplyOption("🎯 ポジティブ共感", "楽しそうな雰囲気がすごく伝わってきます😊")
+                )
+            } else {
+                listOf(
+                    SmartReplyOption("📸 写真リアクション", "写真ありがとう！めっちゃいいねこれ📸"),
+                    SmartReplyOption("💬 写真の質問", "これどこで撮ったやつ？めちゃくちゃ雰囲気いいじゃん！"),
+                    SmartReplyOption("😄 俺流ツッコミ", "映えまくってて笑った😂 センス良すぎ！"),
+                    SmartReplyOption("🎯 ポジティブ共感", "楽しそうなの伝わってくるわ〜！最高😊")
+                )
+            }
         }
 
-        return when {
-            latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
-                SmartReplyOption("🎯 俺流・即答", "おけ！19時くらいはどう？仕事終わりちょうど良さそう！"),
-                SmartReplyOption("🙅‍♂️ 俺流・代案", "その日ちょっと先約あって厳しいわ！来週の平日どう？"),
-                SmartReplyOption("💬 俺流・質問調整", "何時くらいになりそう？そっちの都合いい時間に合わせるよ！"),
-                SmartReplyOption("😄 俺流・ツッコミ共感", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻")
-            )
-            latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
-                SmartReplyOption("🎯 俺流・即答", "本厚木か海老名、茅ヶ崎あたりが行きやすくて助かる！"),
-                SmartReplyOption("🙅‍♂️ 俺流・代案", "そこ混んでそうなら、駅前の静かなとこにする？"),
-                SmartReplyOption("💬 俺流・質問調整", "そっちの行きやすいエリアどこら辺？何系食べたい？😋"),
-                SmartReplyOption("😄 俺流・ツッコミ共感", "美味い飯があるならどこへでも飛んでくわ笑")
-            )
-            else -> listOf(
-                SmartReplyOption("🎯 俺流・即答", "おけ！了解〜！それでいこ👍"),
-                SmartReplyOption("🙅‍♂️ 俺流・代案", "今ちょっと立て込んでるから後でゆっくりLINEするわ！"),
-                SmartReplyOption("💬 俺流・質問調整", "それってどういうこと？もうちょい詳しく教えて！"),
-                SmartReplyOption("😄 俺流・ツッコミ共感", "それ笑うんだけど😂 さすがやな！今日もお疲れ！")
-            )
+        return if (isPolite) {
+            when {
+                latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
+                    SmartReplyOption("🎯 丁寧・即答", "大丈夫です！19時頃でしたらちょうど都合がつきます！"),
+                    SmartReplyOption("🙅‍♂️ 丁寧・代案", "あいにくその日は先約がありまして、来週のご都合はいかがでしょうか？"),
+                    SmartReplyOption("💬 丁寧・質問調整", "何時頃がご都合よろしいでしょうか？合わせますよ！"),
+                    SmartReplyOption("😄 丁寧・共感ノリ良く", "楽しみにしています！ぜひご一緒させてください✨")
+                )
+                latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
+                    SmartReplyOption("🎯 丁寧・即答", "本厚木か海老名、茅ヶ崎あたりでしたら行きやすくて助かります！"),
+                    SmartReplyOption("🙅‍♂️ 丁寧・代案", "そこ混んでいるかもしれないので、駅前の静かなお店にしましょうか？"),
+                    SmartReplyOption("💬 丁寧・質問調整", "どのあたりのエリアがお好きですか？何系が食べたい気分でしょう？😋"),
+                    SmartReplyOption("😄 丁寧・共感ノリ良く", "美味しいご飯でしたらどこへでも伺います笑！")
+                )
+                else -> listOf(
+                    SmartReplyOption("🎯 丁寧・即答", "了解いたしました！ぜひそれでお願いします✨"),
+                    SmartReplyOption("🙅‍♂️ 丁寧・代案", "今少し立て込んでおりまして、落ち着いたら改めてご連絡しますね！"),
+                    SmartReplyOption("💬 丁寧・質問調整", "詳しくお伺いしたいです！どんな感じでしょうか？😊"),
+                    SmartReplyOption("😄 丁寧・共感ノリ良く", "それすごくよく分かります笑！今日もお疲れ様でした✨")
+                )
+            }
+        } else {
+            when {
+                latest.contains(Regex("[?？]")) && latest.contains(Regex("時|いつ|日程|日|曜|何時")) -> listOf(
+                    SmartReplyOption("🎯 俺流・即答", "おけ！19時くらいはどう？仕事終わりちょうど良さそう！"),
+                    SmartReplyOption("🙅‍♂️ 俺流・代案", "その日ちょっと先約あって厳しいわ！来週の平日どう？"),
+                    SmartReplyOption("💬 俺流・質問調整", "何時くらいになりそう？そっちの都合いい時間に合わせるよ！"),
+                    SmartReplyOption("😄 俺流・ツッコミ共感", "早い時間から乾杯しちゃおっか笑 18時半とかいける？🍻")
+                )
+                latest.contains(Regex("[?？]")) && latest.contains(Regex("どこ|場所|駅|店|エリア")) -> listOf(
+                    SmartReplyOption("🎯 俺流・即答", "本厚木か海老名、茅ヶ崎あたりが行きやすくて助かる！"),
+                    SmartReplyOption("🙅‍♂️ 俺流・代案", "そこ混んでそうなら、駅前の静かなとこにする？"),
+                    SmartReplyOption("💬 俺流・質問調整", "そっちの行きやすいエリアどこら辺？何系食べたい？😋"),
+                    SmartReplyOption("😄 俺流・ツッコミ共感", "美味い飯があるならどこへでも飛んでくわ笑")
+                )
+                else -> listOf(
+                    SmartReplyOption("🎯 俺流・即答", "おけ！了解〜！それでいこ👍"),
+                    SmartReplyOption("🙅‍♂️ 俺流・代案", "今ちょっと立て込んでるから後でゆっくりLINEするわ！"),
+                    SmartReplyOption("💬 俺流・質問調整", "それってどういうこと？もうちょい詳しく教えて！"),
+                    SmartReplyOption("😄 俺流・ツッコミ共感", "それ笑うんだけど😂 さすがやな！今日もお疲れ！")
+                )
+            }
         }
     }
 }

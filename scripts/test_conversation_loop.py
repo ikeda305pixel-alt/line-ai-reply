@@ -391,7 +391,8 @@ def test_paypay_and_financial_app_protection():
     print("PayPay & financial app 100% zero-interference suite: PASS ✅")
 
 def test_polite_tone_detection_and_matching():
-    polite_regex = r"(です[。！？!\?\s]*$|ます[。！？!\?\s]*$|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し)"
+    # v1.5.6 regex: no trailing anchor, handles emojis and kanji/hiragana+ます
+    polite_regex = r"(です|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し|([ぁ-ん一-龯]ます))"
 
     def detect_polite(msgs: list) -> bool:
         import re
@@ -401,19 +402,33 @@ def test_polite_tone_detection_and_matching():
         last_is_polite = bool(re.search(polite_regex, clean[-1]))
         return last_is_polite or (polite_count / len(clean) >= 0.35)
 
-    # Polite scenarios
+    # Polite scenarios with and without trailing emojis/marks
     assert detect_polite(["はじめまして！マッチありがとうございます！", "普段どのあたりで遊ばれることが多いですか？"]) == True
+    assert detect_polite(["カフェ巡り好きです😊"]) == True, "Trailing emoji '好きです😊' MUST trigger polite mode!"
+    assert detect_polite(["ぜひ行きたいです〜！✨"]) == True, "Trailing wave and sparkle emoji MUST trigger polite mode!"
     assert detect_polite(["カフェ巡りお好きなんですね！おすすめのお店はありますでしょうか？"]) == True
     assert detect_polite(["来週のご都合はいかがですか？"]) == True
     assert detect_polite(["よろしくお願いします！"]) == True
+    assert detect_polite(["伺います！"]) == True, "Kanji + ます '伺います' MUST trigger polite mode!"
 
     # Casual / slang scenarios - must NOT trigger polite mode
     assert detect_polite(["おつかれー！", "それウケるんだけど笑", "今度飯行こー"]) == False
     assert detect_polite(["りょ！何時？"]) == False
     assert detect_polite(["よろしくー！"]) == False, "Casual 'よろしくー！' must NOT trigger polite mode!"
-    assert detect_polite(["クリスマス楽しみだね"]) == False, "Sentence with 'ます' substring like クリスマス must NOT falsely trigger polite mode!"
+    assert detect_polite(["クリスマス楽しみだね"]) == False, "Sentence with 'ます' substring like クリスマス (katakana) must NOT falsely trigger polite mode!"
 
-    print("Partner polite tone detection & matching suite: PASS ✅")
+    # Check PersonaSynthesizerPlugin for LINE and Bumble keigo synchronization
+    with open("app/src/main/java/com/antigravity/lineaireply/plugin/PersonaSynthesizerPlugin.kt") as f:
+        code = f.read()
+
+    assert "🎯 丁寧・即答" in code, "PersonaSynthesizerPlugin MUST contain polite label '🎯 丁寧・即答'!"
+    assert "🙅‍♂️ 丁寧・代案" in code, "PersonaSynthesizerPlugin MUST contain polite label '🙅‍♂️ 丁寧・代案'!"
+    assert "💬 丁寧・質問調整" in code, "PersonaSynthesizerPlugin MUST contain polite label '💬 丁寧・質問調整'!"
+    assert "😄 丁寧・共感ノリ良く" in code, "PersonaSynthesizerPlugin MUST contain polite label '😄 丁寧・共感ノリ良く'!"
+    assert "2. 【丁寧語（です・ます調）の徹底】" in code, "LINE prompt MUST contain polite keigo instruction!"
+    assert "takeLast(240)" in code, "History expansion MUST take up to 240 turns (2x log depth)!"
+
+    print("Partner polite tone detection & keigo synchronization suite: PASS ✅")
 
 def test_photo_reaction_pipeline():
     photo_words = ["写真", "写真を送信しました", "画像", "画像を送信しました", "photo", "image", "[写真]", "[画像]", "photo sent"]
@@ -527,6 +542,38 @@ def test_bubble_dismiss_and_keyboard_hiding():
 
     print("Bubble manual dismiss, keyboard auto-hide & settings toggle suite: PASS ✅")
 
+def test_bumble_system_filter_and_profile_extraction():
+    bumble_sys_regex = r"(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)"
+
+    import re
+    def is_bumble_system(text: str) -> bool:
+        return bool(re.search(bumble_sys_regex, text, re.IGNORECASE))
+
+    # Real Bumble banners that previously corrupted chat turns
+    assert is_bumble_system("相手が最初のメッセージを送信しました") == True, "Bumble system banner '相手が最初のメッセージ' MUST be filtered!"
+    assert is_bumble_system("返信まであと24時間") == True, "Bumble countdown banner MUST be filtered!"
+    assert is_bumble_system("あやかさんとマッチしました！") == True, "Bumble match notification banner MUST be filtered!"
+    assert is_bumble_system("質問ゲームをプレイして会話を始めましょう") == True, "Bumble game banner MUST be filtered!"
+    assert is_bumble_system("会話の有効期限が切れました") == True, "Bumble expiration banner MUST be filtered!"
+    assert is_bumble_system("First message sent!") == True
+    assert is_bumble_system("You matched with Sarah") == True
+
+    # Real human messages - must NEVER be filtered!
+    assert is_bumble_system("はじめまして！マッチ嬉しいです😊") == False
+    assert is_bumble_system("普段カフェとかよく行きますか？") == False
+    assert is_bumble_system("お肉食べたい気分です！") == False
+
+    # Check ChatConversationExtractor.kt implementation
+    with open("app/src/main/java/com/antigravity/lineaireply/ai/ChatConversationExtractor.kt") as f:
+        extractor_code = f.read()
+
+    assert "BUMBLE_SYSTEM_REGEX" in extractor_code, "ChatConversationExtractor MUST have BUMBLE_SYSTEM_REGEX!"
+    assert "scanProfileScreenTexts" in extractor_code, "ChatConversationExtractor MUST have scanProfileScreenTexts!"
+    assert "extractBumblePartnerName" in extractor_code, "ChatConversationExtractor MUST have extractBumblePartnerName!"
+    assert "takeLast(40)" in extractor_code, "conversationHistory MUST be expanded to 40 turns!"
+
+    print("Bumble system banner filter & profile extraction suite: PASS ✅")
+
 def main():
     res = test_archetype_matrix()
     print(f"Verified {res['archetypes_verified']} personality & scenario archetypes: PASS ✅")
@@ -539,10 +586,11 @@ def main():
     test_ui_chat_confinement_and_anti_duplication()
     test_paypay_and_financial_app_protection()
     test_polite_tone_detection_and_matching()
+    test_bumble_system_filter_and_profile_extraction()
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    print("All loop engineering v1.5.5 tests: 100% PASSED! 🚀")
+    print("All loop engineering v1.5.6 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

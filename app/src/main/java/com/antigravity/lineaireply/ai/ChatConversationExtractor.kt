@@ -47,7 +47,9 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
     private val TIMESTAMP_REGEX = Regex("^(午前|午後)?\\s*\\d{1,2}:\\d{2}$")
     private val DATE_REGEX = Regex("^(\\d{1,4}[年/.-])?\\d{1,2}[月/.-]\\d{1,2}(日)?(\\s*\\(.*\\))?$")
-    private val POLITE_REGEX = Regex("(です[。！？!\\?\\s]*$|ます[。！？!\\?\\s]*$|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し)")
+    private val POLITE_REGEX = Regex(
+        "(です|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしくお願い|ありがとうござい|いただけ|頂け|ご都合|いかが|存じ|恐れ入|致し|([\\p{IsHiragana}\\p{IsHan}]ます))"
+    )
 
     val PHOTO_WORDS = setOf(
         "写真", "写真を送信しました", "画像", "画像を送信しました", "photo", "image", "[写真]", "[画像]", "photo sent"
@@ -59,7 +61,13 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         "メッセージを入力", "メッセージを入力してください", "type a message", "type something",
         "ホーム", "トーク", "タイムライン", "voom", "ニュース", "ウォレット", "メニュー", "検索",
         "戻る", "設定", "スタンプを送信しました", "動画を送信しました",
-        "ピン留め", "通知オフ", "ブロック", "通報", "matches", "chats", "swipe", "liked", "filter"
+        "ピン留め", "通知オフ", "ブロック", "通報", "matches", "chats", "swipe", "liked", "filter",
+        "友だち追加", "グループ", "参加しました", "退会しました", "招待しました", "非表示"
+    )
+
+    private val BUMBLE_SYSTEM_REGEX = Regex(
+        "(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)",
+        RegexOption.IGNORE_CASE
     )
 
     private val PROFILE_KEYWORDS = setOf(
@@ -78,16 +86,40 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
     override fun cacheProfileIfVisible(rootNode: AccessibilityNodeInfo?) {
         if (rootNode == null) return
+        val isChat = isChatRoom(rootNode)
         val profileList = mutableListOf<String>()
-        scanForProfileTexts(rootNode, profileList)
-        val snippet = profileList.distinct().take(4).joinToString(" | ")
+
+        if (!isChat) {
+            // Profile screen: collect bio, badges, prompt answers
+            scanProfileScreenTexts(rootNode, profileList)
+        } else {
+            // In chat room: collect visible prompt cards
+            scanForProfileTexts(rootNode, profileList)
+        }
+
+        val snippet = profileList.distinct().take(10).joinToString(" | ")
         if (snippet.isNotBlank()) {
             lastProfileSnippet = snippet
-            val name = extractHeaderTitle(rootNode, 2400)
+            val name = extractBumblePartnerName(rootNode, 2400)
             if (name.isNotBlank()) {
                 lastProfilePartnerName = name
                 cachedBumbleProfiles[name] = snippet
             }
+        }
+    }
+
+    private fun scanProfileScreenTexts(node: AccessibilityNodeInfo, list: MutableList<String>) {
+        val t = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
+        val lower = t.lowercase()
+
+        val isNav = lower in setOf("back", "戻る", "設定", "settings", "report", "通報", "block", "ブロック", "chats", "swipe", "liked", "filter", "キャンセル", "cancel", "閉じる", "close")
+
+        if (t.length in 2..350 && !isNav && !isSystemLabel(t)) {
+            list.add(t)
+        }
+
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { scanProfileScreenTexts(it, list) }
         }
     }
 
@@ -114,19 +146,23 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val inputTopBound = if (inputRect.top > 0) inputRect.top else (effectiveHeight * 0.88).toInt()
 
         // 1. Extract Partner Name from top header
-        val partnerName = extractHeaderTitle(rootNode, effectiveHeight)
+        val partnerName = if (packageName == PKG_BUMBLE) {
+            extractBumblePartnerName(rootNode, effectiveHeight)
+        } else {
+            extractHeaderTitle(rootNode, effectiveHeight)
+        }
 
         // 2. Extract Profile Snippets (especially for Bumble)
         val visibleProfileList = mutableListOf<String>()
         scanForProfileTexts(rootNode, visibleProfileList)
-        val visibleProfile = visibleProfileList.distinct().take(4).joinToString(" | ")
+        val visibleProfile = visibleProfileList.distinct().take(10).joinToString(" | ")
         if (visibleProfile.isNotBlank() && partnerName.isNotBlank()) {
             cachedBumbleProfiles[partnerName] = visibleProfile
         }
         val finalProfile = when {
-            visibleProfile.isNotBlank() -> visibleProfile
             partnerName.isNotBlank() && cachedBumbleProfiles.containsKey(partnerName) -> cachedBumbleProfiles[partnerName] ?: ""
-            lastProfilePartnerName.isEmpty() || lastProfilePartnerName == partnerName -> lastProfileSnippet
+            visibleProfile.isNotBlank() -> visibleProfile
+            lastProfileSnippet.isNotBlank() -> lastProfileSnippet
             else -> ""
         }
 
@@ -205,11 +241,11 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val lastTurn = messageTurns.lastOrNull()
         val lastMessageIsMe = lastTurn != null && !lastTurn.isPartner
 
-        val partnerSample = partnerTurns.takeLast(4).joinToString(" ") { it.text }
+        val partnerSample = partnerTurns.takeLast(12).joinToString(" ") { it.text }
         val combinedSample = if (partnerSample.isNotBlank()) {
             "$partnerSample ${latestPartnerMessage}"
         } else {
-            (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
+            (messageTurns.takeLast(25).map { it.text }).joinToString(" ")
         }
         val (isForeignOrEnglish, languageDesc) = detectLanguageBackground(combinedSample, finalProfile)
 
@@ -220,7 +256,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         return ChatContext(
             platform = platform,
             partnerName = partnerName,
-            conversationHistory = messageTurns.takeLast(10),
+            conversationHistory = messageTurns.takeLast(40),
             allMessageTurns = messageTurns,
             latestPartnerMessage = latestPartnerMessage,
             latestMyMessage = latestMyMessage,
@@ -280,17 +316,47 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
     }
 
     private fun extractHeaderTitle(root: AccessibilityNodeInfo, screenHeight: Int): String {
-        val topLimit = (screenHeight * 0.09).toInt()
+        val topLimit = (screenHeight * 0.16).toInt()
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
             val rect = Rect()
             node.getBoundsInScreen(rect)
-            if (rect.top < topLimit && rect.bottom <= topLimit + 80) {
+            if (rect.top in 10..topLimit && rect.bottom <= topLimit + 100) {
                 val t = (node.text?.toString()?.trim() ?: "")
-                if (t.length in 2..20 && !isSystemLabel(t)) {
-                    return t
+                if (t.length in 2..24 && !isSystemLabel(t)) {
+                    val clean = t.replace(Regex("[,、]\\s*\\d{1,2}$"), "").trim()
+                    return clean
+                }
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { queue.add(it) }
+            }
+        }
+        return ""
+    }
+
+    private fun extractBumblePartnerName(root: AccessibilityNodeInfo, screenHeight: Int): String {
+        // First try standard header (action bar in chat)
+        val headerName = extractHeaderTitle(root, screenHeight)
+        if (headerName.isNotBlank()) return headerName
+
+        // In Profile View: scan for "Name, Age" or "Name 25" in upper half of screen
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        val limit = (screenHeight * 0.50).toInt()
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.top in 20..limit) {
+                val t = (node.text?.toString()?.trim() ?: "")
+                if (t.matches(Regex("^[\\p{L}\\p{N}\\s]{1,15}[,、\\s]+\\d{2}$"))) {
+                    val namePart = t.split(Regex("[,、\\s]+")).firstOrNull() ?: ""
+                    if (namePart.isNotBlank() && !isSystemLabel(namePart)) {
+                        return namePart
+                    }
                 }
             }
             for (i in 0 until node.childCount) {
@@ -378,6 +444,7 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         if (DATE_REGEX.matches(trimmed)) return true
         if (lower.startsWith("202") && lower.length < 15) return true
         if (trimmed == "既読" || trimmed == "未読") return true
+        if (BUMBLE_SYSTEM_REGEX.containsMatchIn(trimmed)) return true
         return false
     }
 

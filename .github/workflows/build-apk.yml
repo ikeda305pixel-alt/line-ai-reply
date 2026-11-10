@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.5.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.6.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,32 +46,31 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.5
-          name: LINE & Bumble AI Reply Assistant v1.5.5 (厳格検品合格版・東京提案完全根絶＆キーボード連動＆Bumbleプロフ独立キャッシュ)
+          tag_name: v1.5.6
+          name: LINE & Bumble AI Reply Assistant v1.5.6 (LINE/Bumble全敬語同期・過去ログ2倍240件・Bumbleプロフ全文抽出＆システム通知除外)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.5 (厳格検品修正版)
+            ## LINE & Bumble AI返信アシスタント v1.5.6
 
-            ### 🎯 【厳格検品による修正・改良点】
-            1. **東京（渋谷・恵比寿・新宿等）提案の完全根絶**:
-               - 定型文フォールバックやサンプルフレーズに残存していた「渋谷か恵比寿あたり」を完全削除。
-               - 神奈川エリア（本厚木・海老名・茅ヶ崎・辻堂・藤沢・横浜）のみに完全統一。
-            2. **相手の生息地「全員厚木・茅ヶ崎扱い」バグの解消**:
-               - 相手プロファイルのデフォルト生活圏を「不明」に修正。
-               - 会話やBumbleプロフで場所が判明していない相手には「生息: ...」を表示せず、性格タイプのみをクリーンに表示。
-            3. **キーボード表示中のバブル自動隠蔽を完全動作化**:
-               - `AccessibilityWindowInfo.TYPE_INPUT_METHOD` によるOSレベルのソフトキーボード検知を実装。文字入力中はバブルが自動退避し、キーボードを閉じると再出現します。
-               - バックグラウンド監視ループを `Dispatchers.Default` に逃がし、LINE/BumbleのUIカクつき・重さを解消。
-            4. **Bumbleプロフィール画面での独立キャッシュ**:
-               - トーク外（プロフ画面）でも相手の自己紹介・居住地情報を確実に読み込み、相手ごとに個別マップで分離管理（別マッチ相手との情報混同を防止）。
-            5. **敬語判定＆写真検知の精密化**:
-               - 「よろしくー！」などのタメ口や「クリスマス」などの部分一致を敬語誤検知しないよう正規表現を強化。
-               - 「写真立て買った」などの日常会話で写真リアクションが誤発動しないようマーカー判定を厳格化。フォールバックでも写真リアクション＆敬語返信に対応。
+            ### 🎯 【重要改善・修正点】
+            1. **LINE & Bumble 敬語同期の完全徹底**:
+               - LINE・Bumbleともに、相手が敬語（丁寧語）でメッセージを送っている場合は、AI提案の4案すべてを親しみやすく礼儀正しい「丁寧語（です・ます調）」に完全統一（タメ口の強制出力を完全撤廃）。
+               - 語尾に絵文字や波線が付いたメッセージ（「カフェ巡り好きです😊」「行きたいです〜！✨」）でも敬語を100%確実に検知できるよう正規表現を抜本改良。
+               - プロンプトおよび即時フォールバックの両方で丁寧語バリエーション（🎯丁寧・即答、🙅‍♂️丁寧・代案、💬丁寧・質問調整、😄丁寧・共感）を完全実装。
+            2. **過去会話ログの参照深度を2倍（最大240ターン）に拡張**:
+               - プロンプトへ注入する過去の会話履歴を従来の120ターンから「240ターン（2倍スパン）」へ大幅倍増。
+               - 直近の画面内コンテキストも40件まで深く遡って文脈を正確に把握。
+            3. **Bumbleシステム通知の完全除外（会話破綻の根本原因を解消）**:
+               - 「相手が最初のメッセージを送信しました」「返信まであと24時間」「マッチしました！」「質問ゲーム」等のBumbleシステムバナーを相手のメッセージと誤認していた問題を完全修正。
+               - システム通知に対する無意味な定型文返信を根絶し、相手の発言に的確に応答。
+            4. **Bumbleプロフィールの全文抽出＆言及義務化**:
+               - プロフィール画面から自己紹介文（Bio）、プロンプト回答、バッジ、居住地をキーワードに依存せず全文抽出し、キャッシュ。
+               - 相手のプロフィール（趣味、休日の過ごし方、写真、仕事など）に必ず自然に触れて共感・質問するようプロンプトの言及ルールを厳格化。
 
             ### 🛡️ 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名のため、旧バージョンをアンインストールせずそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.5.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.6.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
