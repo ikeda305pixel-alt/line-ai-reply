@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.2.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.3.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,34 +46,36 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.2
-          name: LINE & Bumble AI Reply Assistant v1.5.2 (トーク画面限定表示・ボタン重複解消・UI抜本改善版)
+          tag_name: v1.5.3
+          name: LINE & Bumble AI Reply Assistant v1.5.3 (PayPay完全無干渉・敬語同期・写真リアクション・厚木茅ヶ崎ローカライズ版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.2 (トーク画面限定表示・UI二重化根絶版)
+            ## LINE & Bumble AI返信アシスタント v1.5.3 (PayPay無干渉・厚木茅ヶ崎生活圏版)
 
-            ### 💬 【トーク画面（チャットルーム）限定表示の徹底】
-            - **アプリ外・一覧画面での常駐バブルを完全排除**:
-              - ホーム画面（ランチャー）や他アプリはもちろん、LINE/Bumble内の「トーク一覧」「ホーム」「ニュース」「VOOM」「ウォレット」などトーク画面外ではバブルを即座に完全非表示（`hideAll()`）。
-              - 実際の「トーク画面（チャットルーム）」に入り入力欄が存在する時のみ、控えめにフローティングバブル（💬）を表示します。
+            ### 🛡️ 【PayPay・金融アプリ等への完全無干渉（起動エラーの完全根絶）】
+            - **アクセシビリティ監視対象をLINEとBumbleに厳密限定**:
+              - `accessibility_service_config.xml` の `android:packageNames` に `jp.naver.line.android,com.bumble.app` を設定。OSレベルでPayPayや銀行アプリの監視・干渉を100%遮断。
+            - **能動的Safety Watcherによるオーバーレイ即時完全破棄**:
+              - ホーム画面、タスク切り替え、SystemUI、PayPayなどの他アプリへ遷移した瞬間、即座にオーバーレイViewをWindowManagerから物理消去（`removeView`）。
+              - さらに300ms間隔の安全コルーチンにより、PayPay起動前に画面上のオーバーレイが1ミリ秒たりとも残らないクリーンな状態を保証します。
 
-            ### 🎯 【ボタン二重表示（重複表示）の完全根絶】
-            - **フローティングバブルと返信カードの完全排他制御**:
-              - 返信カード表示中はバブルを即座に非表示にし、画面上にボタンが二重に見える不快感を解消。返信カードを閉じた際にのみ安全にバブルが復帰します。
-            - **イベント二重発火・重複Jobの防止**:
-              - 返信ボタンタップ時のアクセシビリティ誤爆リスナーを撤廃し、先行する返信生成タスクを明示的にキャンセル（`replyJob?.cancel()`）することで、返信カードが多重に重なる現象を防止。
-            - **洗練されたクリーンなUI**:
-              - Bumble時の案4（LINE交換）と重複していた下部バーの「LINE誘う」ボタンや不要な設定ボタンを削除。
-              - 「タップで入力欄にセットされます」「🔄 別の案」「✍️ 手動入力」の直感的で美しいUIに刷新。
+            ### 🤝 【Bumble 相手の口調・トーン適応（敬語/タメ口マッチング）】
+            - **相手が敬語なら大人の好印象な敬語で返信**:
+              - 相手のメッセージが丁寧語（です・ます調、〜でしょうか、〜ですね等）の場合、馴れ馴れしいタメ口を完全禁止。誠実で爽やかな大人の敬語で回答します。
+              - 相手がフランク・タメ口なら親しみやすいトーンで同期します。
 
-            ### 🌐 【英語話者へのネイティブ英語返信＆画面静止保証】
-            - 英語メッセージには100%自然なネイティブ英語4択で回答。
-            - バックグラウンドでの勝手な左右スクロール・タブ切り替わり・広告ジャンプはゼロ。
+            ### 📷 【相手の写真送信に対する自然なリアクション】
+            - 相手が写真を送ってきたことを検知し、「写真ありがとう！めっちゃ美味しそう！どこ？」「いい景色だね！」「可愛い！」など、写真に対する自然な感想や質問を含めた返信案を生成します。
+
+            ### 📍 【ユーザー生活圏（厚木・茅ヶ崎、神奈川）ローカライズ＆東京提案の完全禁止】
+            - **生活拠点を神奈川県（厚木市・茅ヶ崎市・湘南エリア）に完全設定**:
+              - 勝手に「渋谷で肉食べよう」「恵比寿のカフェ」など東京を提案することを【完全禁止】にしました。
+              - 相手のプロフィールや居住地を踏まえつつ、厚木、本厚木、茅ヶ崎、海老名、辻堂、藤沢、平塚、横浜など、お互いが無理なく会える神奈川エリア基準の提案を行います。
 
             ### 🛡️ 【固定署名キーストアによる直接「更新」】
             - アプリのアンインストール不要で、そのまま「更新」を押すだけで即座にアップデート完了。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.2.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.3.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

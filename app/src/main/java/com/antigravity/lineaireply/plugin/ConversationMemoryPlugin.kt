@@ -146,7 +146,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
         val sampleList = if (rawSamples.isNotBlank()) {
             rawSamples.split("|||").filter { it.isNotBlank() }
         } else {
-            listOf("あいてるよ！なんかある？", "渋谷で肉食べよー🥩", "それ笑うんだけど😂", "仕事終わったら連絡するわ！")
+            listOf("あいてるよ！なんかある？", "茅ヶ崎で海見ながらカフェ行こー☕️", "それ笑うんだけど😂", "厚木か海老名あたりで美味いもん食べよ！")
         }
 
         val count = metaPrefs.getInt(KEY_USER_LEARNED_COUNT, sampleList.size)
@@ -162,7 +162,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                 val obj = root.getJSONObject(key)
                 return PartnerDossier(
                     name = key,
-                    location = obj.optString("location", "都内・行動圏探索中"),
+                    location = obj.optString("location", "神奈川・湘南（厚木・茅ヶ崎エリア）"),
                     personalityType = obj.optString("personality", "ノリ重視・フランク"),
                     strategy = obj.optString("strategy", "適度にイジりつつ肯定して甘やかし、テンポよく主導権を握る"),
                     accumulatedMessageCount = obj.optInt("count", getAccumulatedTurnCount(key))
@@ -174,7 +174,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
         return PartnerDossier(
             name = key,
-            location = "都内・行動圏探索中",
+            location = "神奈川・湘南（厚木・茅ヶ崎エリア）",
             personalityType = "感情表現豊か・リアクション重視",
             strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす",
             accumulatedMessageCount = getAccumulatedTurnCount(key)
@@ -528,7 +528,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
     private fun profilePartnerPersona(partnerName: String, partnerMessages: List<MessageTurn>): PartnerDossier {
         val combined = partnerMessages.joinToString(" ") { it.text }
-        val detectedArea = detectLocations(combined).ifEmpty { "都内・行動圏探索中" }
+        val detectedArea = detectLocations(combined).ifEmpty { "神奈川・湘南（厚木・茅ヶ崎エリア）" }
 
         val hasWhining = combined.contains(Regex("無理|嫌|〜して|今すぐ|わがまま|連れてって|おごって|ダメ"))
         val hasComplaints = combined.contains(Regex("うざ|疲れた|最悪|聞いて|大変|死ぬ|きつい"))
@@ -577,8 +577,9 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
     private fun detectLocations(text: String): String {
         val areas = listOf(
-            "渋谷", "新宿", "池袋", "恵比寿", "中目黒", "代官山", "六本木", "銀座", "表参道",
-            "下北沢", "三軒茶屋", "吉祥寺", "品川", "横浜", "川崎", "上野", "秋葉原", "中央線", "井の頭線"
+            "厚木", "本厚木", "茅ヶ崎", "海老名", "辻堂", "藤沢", "湘南", "平塚", "大船", "小田原", "相模原", "橋本", "町田",
+            "横浜", "みなとみらい", "桜木町", "関内", "川崎", "武蔵小杉", "鎌倉", "江の島",
+            "渋谷", "新宿", "恵比寿", "中目黒", "品川", "東京"
         )
         val found = areas.filter { text.contains(it) }
         return if (found.isNotEmpty()) found.joinToString("・") else ""

@@ -27,7 +27,9 @@ data class ChatContext(
     val shouldSuggestLineInvite: Boolean,
     val inputNode: AccessibilityNodeInfo?,
     val partnerMessageCount: Int,
-    val userMessageCount: Int
+    val userMessageCount: Int,
+    val isPartnerPhotoRecent: Boolean = false,
+    val isPartnerPolite: Boolean = false
 )
 
 /**
@@ -45,12 +47,18 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
     private val TIMESTAMP_REGEX = Regex("^(午前|午後)?\\s*\\d{1,2}:\\d{2}$")
     private val DATE_REGEX = Regex("^(\\d{1,4}[年/.-])?\\d{1,2}[月/.-]\\d{1,2}(日)?(\\s*\\(.*\\))?$")
+    private val POLITE_REGEX = Regex("(です|ます|でした|ました|でしょうか|ですね|ですよ|ですか|はじめまして|よろしく|お願いします|ありがとうございます|いただけます|頂け|ご都合|いかが|存じ|恐れ入)")
+
+    val PHOTO_WORDS = setOf(
+        "写真", "写真を送信しました", "画像", "画像を送信しました", "photo", "image", "[写真]", "[画像]", "photo sent"
+    )
+
     private val SYSTEM_WORDS = setOf(
         "line", "bumble", "送信", "send", "キャンセル", "cancel", "既読", "未読", "送信中",
-        "通話", "音声通話", "ビデオ通話", "アルバム", "ノート", "イベント", "スタンプ", "写真", "動画",
+        "通話", "音声通話", "ビデオ通話", "アルバム", "ノート", "イベント", "スタンプ", "動画",
         "メッセージを入力", "メッセージを入力してください", "type a message", "type something",
         "ホーム", "トーク", "タイムライン", "voom", "ニュース", "ウォレット", "メニュー", "検索",
-        "戻る", "設定", "スタンプを送信しました", "写真を送信しました", "動画を送信しました",
+        "戻る", "設定", "スタンプを送信しました", "動画を送信しました",
         "ピン留め", "通知オフ", "ブロック", "通報", "matches", "chats", "swipe", "liked", "filter"
     )
 
@@ -170,8 +178,15 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
 
         // STRICT TARGETING:
         // The reply MUST answer the partner's chat (Left side), NEVER the user's own message (Right side)!
-        val latestPartnerMessage = partnerTurns.lastOrNull()?.text ?: ""
+        val latestPartnerTurn = partnerTurns.lastOrNull()
+        val latestPartnerMessage = latestPartnerTurn?.text ?: ""
         val latestMyMessage = myTurns.lastOrNull()?.text ?: ""
+
+        val isPartnerPhotoRecent = latestPartnerTurn != null &&
+                (latestPartnerTurn.text.contains("📷") || latestPartnerTurn.text.contains("写真"))
+
+        val partnerTexts = partnerTurns.map { it.text }
+        val isPartnerPolite = detectPoliteTone(partnerTexts)
 
         // Check if the latest message on screen was sent by Me
         val lastTurn = messageTurns.lastOrNull()
@@ -204,8 +219,20 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             shouldSuggestLineInvite = shouldSuggestLineInvite,
             inputNode = inputNode,
             partnerMessageCount = partnerTurns.size,
-            userMessageCount = myTurns.size
+            userMessageCount = myTurns.size,
+            isPartnerPhotoRecent = isPartnerPhotoRecent,
+            isPartnerPolite = isPartnerPolite
         )
+    }
+
+    fun detectPoliteTone(messages: List<String>): Boolean {
+        if (messages.isEmpty()) return false
+        val clean = messages.filter { !it.startsWith("📷") && it.isNotBlank() }
+        if (clean.isEmpty()) return false
+        val politeCount = clean.count { POLITE_REGEX.containsMatchIn(it) }
+        val lastMessage = clean.lastOrNull() ?: ""
+        val lastIsPolite = POLITE_REGEX.containsMatchIn(lastMessage)
+        return lastIsPolite || (politeCount.toDouble() / clean.size >= 0.35)
     }
 
     override fun detectLanguageBackground(sample: String, profileText: String): Pair<Boolean, String> {
@@ -308,10 +335,17 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val isInMessageArea = rect.top >= topBound && rect.bottom <= bottomBound
         val rawText = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
 
-        if (isInMessageArea && rawText.isNotBlank()) {
+        if (isInMessageArea) {
             val isFullWidthContainer = rect.width() > screenWidth * 0.95 && rect.height() > screenHeight * 0.3
-            if (!isFullWidthContainer && !isSystemLabel(rawText)) {
-                list.add(RawTextNode(rawText, rect))
+            if (!isFullWidthContainer) {
+                val lower = rawText.lowercase()
+                val isPhotoNode = PHOTO_WORDS.any { lower == it || lower.contains("写真を送信") } ||
+                        cls.contains("ImageView", ignoreCase = true) && (lower.contains("写真") || lower.contains("photo") || lower.contains("image"))
+                if (isPhotoNode) {
+                    list.add(RawTextNode("📷 [写真を送信しました]", rect))
+                } else if (rawText.isNotBlank() && !isSystemLabel(rawText)) {
+                    list.add(RawTextNode(rawText, rect))
+                }
             }
         }
 

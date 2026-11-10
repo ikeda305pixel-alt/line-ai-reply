@@ -54,57 +54,92 @@ class LineAccessibilityService : AccessibilityService() {
         assistant = SmartChatAssistant(key, guard, memoryManager)
     }
 
+    private var safetyWatchJob: Job? = null
+
+    private fun startSafetyWatcher() {
+        if (safetyWatchJob?.isActive == true) return
+        safetyWatchJob = serviceScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(300)
+                val currentRoot = rootInActiveWindow
+                val currentPkg = currentRoot?.packageName?.toString() ?: ""
+                val isTargetApp = (currentPkg == PKG_LINE || currentPkg == PKG_BUMBLE)
+                val inChat = isTargetApp && ChatConversationExtractor.isChatRoom(currentRoot)
+                if (!inChat) {
+                    overlayManager.hideAll()
+                    break
+                }
+            }
+        }
+    }
+
+    private fun stopSafetyWatcher() {
+        safetyWatchJob?.cancel()
+        safetyWatchJob = null
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: ""
 
-        // Ignore System UI & Soft Keyboards so bubble stays visible when typing
-        if (pkg.isEmpty() ||
-            pkg.startsWith("com.android.systemui") ||
-            pkg.contains("inputmethod", ignoreCase = true) ||
-            pkg.contains("gboard", ignoreCase = true) ||
-            pkg.contains("ime", ignoreCase = true)
-        ) {
+        // Handle soft keyboards gracefully: keep bubble if actively typing inside LINE/Bumble chat room
+        val isKeyboard = pkg.contains("inputmethod", ignoreCase = true) ||
+                pkg.contains("gboard", ignoreCase = true) ||
+                pkg.contains("ime", ignoreCase = true)
+
+        if (isKeyboard) {
+            val root = rootInActiveWindow
+            val currentPkg = root?.packageName?.toString() ?: ""
+            if (currentPkg != PKG_LINE && currentPkg != PKG_BUMBLE) {
+                overlayManager.hideAll()
+                stopSafetyWatcher()
+            }
             return
         }
 
-        if (pkg == PKG_LINE || pkg == PKG_BUMBLE) {
-            val root = rootInActiveWindow
-            val isInChatRoom = ChatConversationExtractor.isChatRoom(root)
+        // CRITICAL PROTECTION FOR PAYPAY & FINANCIAL APPS:
+        // If user is in ANY app other than LINE or Bumble (Home, PayPay, Settings, SystemUI, etc.),
+        // IMMEDIATELY HIDE AND DESTROY ALL OVERLAYS!
+        if (pkg != PKG_LINE && pkg != PKG_BUMBLE) {
+            overlayManager.hideAll()
+            stopSafetyWatcher()
+            return
+        }
 
-            if (isInChatRoom) {
-                val platform = when (pkg) {
-                    PKG_BUMBLE -> "Bumble"
-                    else -> "LINE"
-                }
+        val root = rootInActiveWindow
+        val isInChatRoom = ChatConversationExtractor.isChatRoom(root)
 
-                // In Bumble, continuously cache profile prompts if visible
-                if (pkg == PKG_BUMBLE) {
-                    ChatConversationExtractor.cacheProfileIfVisible(root)
-                }
+        if (isInChatRoom) {
+            val platform = when (pkg) {
+                PKG_BUMBLE -> "Bumble"
+                else -> "LINE"
+            }
 
-                // Show floating bubble ONLY when replies modal is not open
-                if (!overlayManager.isRepliesShowing()) {
-                    overlayManager.showBubble(platform) {
-                        handleBubbleClicked(platform, pkg)
-                    }
-                }
+            // In Bumble, continuously cache profile prompts if visible
+            if (pkg == PKG_BUMBLE) {
+                ChatConversationExtractor.cacheProfileIfVisible(root)
+            }
 
-                // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
-                if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-                    event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
-                    event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                ) {
-                    harvestCurrentScreenAsync(pkg)
+            // Show floating bubble ONLY when replies modal is not open
+            if (!overlayManager.isRepliesShowing()) {
+                overlayManager.showBubble(platform) {
+                    handleBubbleClicked(platform, pkg)
                 }
-            } else {
-                // User is in LINE/Bumble but outside talk room (e.g. Talk list, Home, News, VOOM, Settings)
-                // HIDE IMMEDIATELY so it never gets in the user's way!
-                overlayManager.hideAll()
+                startSafetyWatcher()
+            }
+
+            // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            ) {
+                harvestCurrentScreenAsync(pkg)
             }
         } else {
-            // User switched to another app (Home, Chrome, YouTube, etc.) -> HIDE ALL IMMEDIATELY
+            // User is in LINE/Bumble but outside talk room (e.g. Talk list, Home, News, VOOM, Settings)
+            // HIDE IMMEDIATELY so it never gets in the user's way!
             overlayManager.hideAll()
+            stopSafetyWatcher()
         }
     }
 
@@ -324,7 +359,7 @@ class LineAccessibilityService : AccessibilityService() {
 
             val profilePreview = if (chatContext.profileSnippet.isNotBlank()) {
                 chatContext.profileSnippet
-            } else if (partnerDossier.location != "都内・行動圏探索中") {
+            } else if (partnerDossier.location.isNotBlank()) {
                 "生息: ${partnerDossier.location} / 性格: ${partnerDossier.personalityType}"
             } else {
                 ""
@@ -351,6 +386,7 @@ class LineAccessibilityService : AccessibilityService() {
                         overlayManager.showBubble(chatContext.platform) {
                             handleBubbleClicked(chatContext.platform, if (isBumble) PKG_BUMBLE else PKG_LINE)
                         }
+                        startSafetyWatcher()
                     }
                 }
             )
@@ -358,11 +394,13 @@ class LineAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        stopSafetyWatcher()
         overlayManager.hideAll()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        stopSafetyWatcher()
         overlayManager.hideAll()
     }
 }
