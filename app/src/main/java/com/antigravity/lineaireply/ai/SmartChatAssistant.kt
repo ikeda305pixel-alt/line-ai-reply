@@ -37,7 +37,7 @@ class SmartChatAssistant(
     companion object {
         const val TAG = "SmartChatAssistant"
         const val USER_LINE_LINK = "https://line.me/ti/p/TYxbDIk4sd"
-        const val JA_LINE_INVITE = "予定立てやすいのでライン交換してください!\n$USER_LINE_LINK"
+        const val JA_LINE_INVITE = "予定立てやすいしLINE交換しよー！\n$USER_LINE_LINK"
         const val EN_LINE_INVITE = "It's much easier to plan and stay in touch on LINE! Let's connect here: $USER_LINE_LINK"
 
         /**

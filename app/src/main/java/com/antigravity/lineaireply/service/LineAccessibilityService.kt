@@ -179,8 +179,8 @@ class LineAccessibilityService : AccessibilityService() {
             var partnerName = ""
             val metrics = resources.displayMetrics
 
-            // Scroll backwards (upwards) 10 times to harvest historical conversation
-            for (step in 1..10) {
+            // Scroll backwards (upwards) up to 12 times to harvest complete historical conversation
+            for (step in 1..12) {
                 val root = rootInActiveWindow
                 if (root != null) {
                     val chatContext = ChatConversationExtractor.extract(
@@ -190,7 +190,8 @@ class LineAccessibilityService : AccessibilityService() {
                         if (partnerName.isEmpty() && chatContext.partnerName.isNotBlank()) {
                             partnerName = chatContext.partnerName
                         }
-                        for (turn in chatContext.conversationHistory) {
+                        val turns = chatContext.allMessageTurns.ifEmpty { chatContext.conversationHistory }
+                        for (turn in turns) {
                             if (!allHarvestedTurns.any { it.text == turn.text }) {
                                 allHarvestedTurns.add(turn)
                             }
@@ -203,11 +204,12 @@ class LineAccessibilityService : AccessibilityService() {
                 if (!scrolled) {
                     break
                 }
-                kotlinx.coroutines.delay(400)
+                kotlinx.coroutines.delay(350)
             }
 
             if (allHarvestedTurns.isNotEmpty()) {
                 withContext(Dispatchers.IO) {
+                    // Record all turns into persistent memory
                     memoryManager.recordScreenTurns(partnerName, allHarvestedTurns)
                     val key = prefs.getString("gemini_key", "") ?: ""
                     val rawPastedText = allHarvestedTurns.joinToString("\n") {

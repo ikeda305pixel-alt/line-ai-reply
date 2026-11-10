@@ -14,6 +14,7 @@ data class ChatContext(
     val platform: String, // "LINE" or "Bumble"
     val partnerName: String,
     val conversationHistory: List<MessageTurn>,
+    val allMessageTurns: List<MessageTurn> = emptyList(),
     val latestPartnerMessage: String,
     val latestMyMessage: String,
     val profileSnippet: String,
@@ -139,18 +140,13 @@ object ChatConversationExtractor {
 
             val rightMargin = effectiveWidth - rect.right
             val leftMargin = rect.left
-            val centerX = rect.centerX()
 
-            // Is this the user's own sent message (Right side)?
-            // A message is right-aligned (Me) if:
-            // 1. rightMargin is significantly smaller than leftMargin, OR
-            // 2. centerX > 55% of screen width, OR
-            // 3. rightMargin < 12% of screen width (flush against the right edge).
-            val isMe = (rightMargin < leftMargin && centerX > effectiveWidth * 0.45) ||
-                       (rightMargin < effectiveWidth * 0.12) ||
-                       (centerX > effectiveWidth * 0.58)
-
-            val isPartner = !isMe
+            // Classify speaker based on screen layout:
+            // Partner (Left side): Must start near the left margin (rect.left <= 24% screen width, next to avatar icon).
+            // User (Right side): Has timestamp/read-receipt on the left (rect.left > 24%), flush against right edge.
+            val isPartner = (rect.left <= effectiveWidth * 0.24) ||
+                            (leftMargin < rightMargin && rect.left < effectiveWidth * 0.35)
+            val isMe = !isPartner
 
             messageTurns.add(
                 MessageTurn(
@@ -186,6 +182,7 @@ object ChatConversationExtractor {
             platform = platform,
             partnerName = partnerName,
             conversationHistory = messageTurns.takeLast(10),
+            allMessageTurns = messageTurns,
             latestPartnerMessage = latestPartnerMessage,
             latestMyMessage = latestMyMessage,
             profileSnippet = finalProfile,
@@ -203,13 +200,16 @@ object ChatConversationExtractor {
         val combined = "$sample $profileText".trim()
         if (combined.isEmpty()) return Pair(false, "日本語")
 
-        val latinCount = combined.count { it in 'a'..'z' || it in 'A'..'Z' }
-        val japaneseCount = combined.count { it in '\u3040'..'\u30ff' || it in '\u4e00'..'\u9faf' }
+        // Strip URLs (e.g. LINE invite link, instagram URL) so they don't skew Latin count
+        val cleanText = combined.replace(Regex("https?://\\S+"), " ")
+
+        val latinCount = cleanText.count { it in 'a'..'z' || it in 'A'..'Z' }
+        val japaneseCount = cleanText.count { it in '\u3040'..'\u30ff' || it in '\u4e00'..'\u9faf' }
 
         val hasForeignKeywords = Regex(
             "from\\s+[a-z]+|lives?\\s+in|expat|native|english|speak|tokyo|japan|foreigner|travel|visit|study abroad|アメリカ|カナダ|オーストラリア|イギリス|ハーフ|海外|留学",
             RegexOption.IGNORE_CASE
-        ).containsMatchIn(combined)
+        ).containsMatchIn(cleanText)
 
         val isEnglishDominant = latinCount > 20 && (japaneseCount == 0 || latinCount > japaneseCount * 2)
         val isForeigner = isEnglishDominant || (latinCount > 10 && hasForeignKeywords)
@@ -248,11 +248,10 @@ object ChatConversationExtractor {
         val t = (node.text?.toString()?.trim() ?: node.contentDescription?.toString()?.trim() ?: "")
         val lower = t.lowercase()
 
-        // Match profile prompt keywords or bio descriptions
+        // Match profile prompt keywords or bio descriptions specifically
         val matchesKeyword = PROFILE_KEYWORDS.any { lower.contains(it) }
-        val isDescriptive = t.length in 18..300 && !isSystemLabel(t)
 
-        if ((matchesKeyword || isDescriptive) && !isSystemLabel(t)) {
+        if (matchesKeyword && !isSystemLabel(t) && t.length in 4..300) {
             list.add(t)
         }
 

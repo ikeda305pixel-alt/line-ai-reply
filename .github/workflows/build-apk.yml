@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.3.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.4.4.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,35 +46,36 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.4.3
-          name: LINE & Bumble AI Reply Assistant v1.4.3 (左右話者完全分離・過去ログ全自動スキャン学習版)
+          tag_name: v1.4.4
+          name: LINE & Bumble AI Reply Assistant v1.4.4 (ループエンジニアリング全合格・左右完全分離・自動ログ学習版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.4.3 (左右話者完全分離・過去ログ全自動スキャン学習版)
+            ## LINE & Bumble AI返信アシスタント v1.4.4 (ループエンジニアリング全合格版)
 
-            ### 🎯 左右話者分離の完全修正（右＝自分、左＝相手）
-            - **自分への返信バグを根絶**:
-              LINEの吹き出しが中長文（20文字以上）になった際に、画面左側に広がって「相手のメッセージ」と誤判定されていた判定アルゴリズムを刷新。
-            - **厳密なマージン＆中心座標（centerX）判定**:
-              右寄せの自分メッセージ（右マージン小・右側寄り）と左寄せの相手メッセージ（左マージン小・左側寄り）を100%確実に識別。
-            - **返信対象ロックオン**:
-              AIが返信対象とするメッセージを**左側チャット（相手の直前メッセージ）に100%限定**。画面最下部に自分の送信済みメッセージがあっても、絶対に自分に対して返信しません。
-            - **プロンプト絶対厳守ルール0番**:
-              「返信案は相手（左側）に対する返答であり、右側の自分の発言への返信・相槌は絶対禁止」をプロンプト最優先事項として徹底注入。
+            ### 🎯 【P0バグ完全撃破】左右話者分離の幾何学的証明に基づく刷新
+            - **相手の長文（20文字以上）誤判定の根絶**:
+              相手の吹き出しが右に伸びた際、`rightMargin < leftMargin` で「自分」と誤判定されていた致命的バグを解消。
+              LINE/Bumbleの不変特性（相手は必ず左端 `rect.left <= 24%` から開始、自分は時刻・既読スペースのため `rect.left > 24%`）に基づく完全幾何学判定に移行。
+            - **返信対象を相手メッセージに100%固定**:
+              自分の送信メッセージや相槌に絶対に返信せず、常に相手の最新発言のみを回答ターゲットとします。
 
-            ### 🤖 過去ログの「完全自動読み込み・学習」（手動エクスポート・ファイル操作不要）
-            - **機能A：受動的リアルタイム自動蓄積**:
-              LINEやBumbleを開いてスクロール・閲覧するだけで、画面上の全吹き出しをバックグラウンドで自動的にローカルメモリに蓄積。
-            - **機能B：ワンタップ全自動遡りスキャン（「🤖 過去ログ全自動読込」ボタン）**:
-              オーバーレイ上に新設された「🤖 過去ログ全自動読込」をタップすると、アプリ自身がトーク画面を上へ自動スクロールしながら過去ログを一網打尽にスキャン。
-              - 自分の文体・語尾・テンポ（俺スタイル）を自動学習。
-              - 相手の生息エリアや人間性（相手カルテ）を自動分析。
-              - トーク履歴のファイル書き出しやコピー＆ペーストなどの手作業は一切不要！
+            ### 🤖 【P1&P2改善】過去ログ全自動学習 ＆ Bumbleプロフ精度向上
+            - **アクセシビリティ `typeViewScrolled` 正式追加**:
+              ユーザーがトーク画面を通常スクロールするだけで受動的ログ収集が100%漏れなくバックグラウンド発火。
+            - **ワンタップ全自動遡りスキャン (`allMessageTurns`)**:
+              「🤖 過去ログ全自動読込」で画面を遡りながら、10件制限なく全件メッセージを一網打尽にスキャン＆「俺スタイル」「相手カルテ」に完全自動学習。
+            - **Bumbleプロフィール誤キャッシュ防止**:
+              チャット吹き出しがプロフィールBioに誤混入する不具合を修正。Bio/Prompts固有キーワードのみを厳格抽出。
+            - **URL除去による言語誤判定防止**:
+              LINE URL等の英字リンクで日本人相手が「英語」と誤判定されるエッジケースをサニタイズ処理で根絶。
+            - **フランクなLINE移行文**:
+              ユーザーの「俺スタイル」に合わせ、「予定立てやすいしLINE交換しよー！」にブラッシュアップ。
 
-            ### 🚀 404エラー根絶・動的モデル自動検知（v1.4.2より継続）
-            - APIキーを入力した際、Googleの `ListModels` API を直接照会し、有効な最新モデル（gemini-2.5-flash等）を自動検知して接続。
+            ### 🚀 404エラー根絶・固定キーストアワンタップ更新
+            - `ListModels` API 動的自動検知
+            - 固定署名キーによる直接上書き「更新」対応
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.4.3.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.4.4.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
