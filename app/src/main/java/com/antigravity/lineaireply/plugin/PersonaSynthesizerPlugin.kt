@@ -101,7 +101,27 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
             【絶対厳守の返信生成ルール】
             0. 【最重要：自分の発言への自己返信・相槌の完全禁止】
-               必ず相手の「${context.latestPartnerMessage}」に対して回答してください。自分の発言への自己返信は厳禁です。
+               必ず相手のチャット「${context.latestPartnerMessage}」に対して回答してください。自分の発言への自己返信は厳禁です。
+            ${if (isEnglishOrForeign) """
+            1. 【言語設定：100%自然なネイティブ英語（★最重要・日本語厳禁）】
+               相手は英語話者です。返信案4つはすべて【100%自然でチャーミングな日常会話の英語】で作成してください。日本語での回答は【絶対に禁止】です！
+               教科書のような堅い直訳や、安っぽいナンパ（Pick-up lines）は厳禁。等身大で好印象、自然体のウィットと誠実さが伝わる英語にしてください。
+            2. 【チャラさゼロ × 全部俺流】
+               過剰な褒め殺しやキザな駆け引きは禁止。親しみやすいトーンを保ってください。
+            3. 【4つの異なる英語バリエーション】
+               - 案1 🎯【Direct Answer】: 自然体でド直球の好印象な即答。
+               - 案2 ☕️【Connection & Question】: 相手の話題やプロフィールに共感しつつ自然に広げる逆質問。
+               - 案3 😄【Witty Banter】: クスッと笑える爽やかなウィット・イジり。
+               - 案4 ${if (shouldInvite) "📲【Switch to LINE】" else "🚀【Casual Plan】"}: ${if (shouldInvite) "以下のLINE移行メッセージを提示：\n$EN_LINE_INVITE" else "自然で爽やかなカフェやご飯の提案。"}
+
+            出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+            [
+              {"label": "🎯 Direct Answer", "text": "(Charming friendly direct English response)"},
+              {"label": "☕️ Connection & Question", "text": "(Engaging follow-up question in English)"},
+              {"label": "😄 Witty Banter", "text": "(Playful witty remark in English)"},
+              {"label": "${if (shouldInvite) "📲 Switch to LINE" else "🚀 Casual Plan"}", "text": "${if (shouldInvite) EN_LINE_INVITE else "(Casual fun proposal in English)"}"}
+            ]
+            """.trimIndent() else """
             1. 【チャラさゼロ × 全部俺流】
                安っぽい褒め言葉やホスト風の転がしは一切不要です。ユーザー本人の文体サンプルに忠実な、等身大で親しみやすい口調にしてください。
             2. 【蓄積全ログの文脈理解】
@@ -110,15 +130,16 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
                - 案1 🎯【俺流・即答】: 自然体でド直球の好印象な即答。
                - 案2 ☕️【俺流・共感質問】: 相手の話題・プロフに共感しつつ自然に広げる逆質問。
                - 案3 😄【俺流・ツッコミ】: ギャップや話題にクスッと笑えるウィットなイジり。
-               - 案4 ${if (shouldInvite) "📲【俺流・LINE交換】" else "🚀【俺流・爽やか提案】"}: ${if (shouldInvite) "以下のLINE移行文（リンク付き）を自然に提示：\n" + (if (isEnglishOrForeign) "「$EN_LINE_INVITE」" else "「$JA_LINE_INVITE」") else "相手の生活圏を踏まえたサクッと気軽なご飯の提案。"}
+               - 案4 ${if (shouldInvite) "📲【俺流・LINE交換】" else "🚀【俺流・爽やか提案】"}: ${if (shouldInvite) "以下のLINE移行文（リンク付き）を自然に提示：\n「$JA_LINE_INVITE」" else "相手の生活圏を踏まえたサクッと気軽なご飯の提案。"}
 
             出力は以下のJSON配列のみ（Markdownコードブロック不要）：
             [
               {"label": "🎯 俺流・即答", "text": "（自然体でド直球の好印象な即答）"},
               {"label": "☕️ 俺流・共感質問", "text": "（共感して話題を広げる逆質問）"},
               {"label": "😄 俺流・ツッコミ", "text": "（爽やかなイジり・笑い）"},
-              {"label": "${if (shouldInvite) "📲 LINE交換" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) (if (isEnglishOrForeign) EN_LINE_INVITE else JA_LINE_INVITE) else "（気軽な提案）"}"}
+              {"label": "${if (shouldInvite) "📲 LINE交換" else "🚀 爽やか提案"}", "text": "${if (shouldInvite) JA_LINE_INVITE else "（気軽な提案）"}"}
             ]
+            """.trimIndent()}
             """.trimIndent()
         } else {
             // LINE context: Friends, Family, Work, Everyday Life
@@ -130,6 +151,9 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
             【相手の名前/グループ】: $partnerResolvedName
             【相手の生活圏・特徴（もしあれば）】: ${partnerDossier.location}
+
+            【言語・国際的背景】
+            - 検出傾向: ${context.languageDesc} (外国人/英語話者の可能性: ${if (isEnglishOrForeign) "高" else "低/日本人"})
 
             【ユーザー本人の回答スタイル（自分がどういう回答をするのかの精密プロファイル）】
             - 回答・口調の特徴: ${userStyle.summary}
@@ -156,6 +180,28 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
                必ず相手のチャット「${context.latestPartnerMessage}」に対して回答してください。自分への自己返信は厳禁です。
             1. 【チャラさ・恋愛工学の完全排除】
                キザな口説きや不自然な褒め言葉は厳禁。家族や男友達に胸を張って送れる等身大の「俺」として返信してください。
+            ${if (isEnglishOrForeign) """
+            2. 【言語設定：100%自然な日常会話カジュアル英語（★最重要・日本語厳禁）】
+               相手は英語話者です。返信案4つはすべて【100%自然な日常会話のカジュアル英語（タメ口、スラング、テンポの良い短文）】で作成してください。日本語での回答は【絶対に禁止】です！
+               ユーザー本人の等身大・親しみやすさ・フレンドリーな雰囲気を保った、短く自然な英語にしてください。硬いビジネス英語や教科書英語は禁止です。
+            3. 【4大基本パターンの網羅（英語）】
+               - 案1 🎯【Direct YES / Count me in】:
+                 承諾、合意、快諾（例: "Sounds awesome, count me in!", "Yeah absolutely! Let's do it 👍"）
+               - 案2 🙅‍♂️【Alternative NO / Reschedule】:
+                 角を立てずに断る、別日程提案（例: "Ah I'm tied up today, how about next week?", "Super slammed right now, I'll text you later tonight!"）
+               - 案3 💬【Details / Question】:
+                 時間・場所・詳細の質問（例: "What time were you thinking?", "Where should we meet?", "What kind of vibe is the spot?"）
+               - 案4 😄【Humor / Reaction】:
+                 クスッと笑えるツッコミ、共感、労い（例: "Haha that cracked me up 😂 You're wild", "Hang in there today! Don't work too hard 💪"）
+
+            出力は以下のJSON配列のみ（Markdownコードブロック不要）：
+            [
+              {"label": "🎯 Direct YES", "text": "(Enthusiastic natural casual English answer)"},
+              {"label": "🙅‍♂️ Alternative NO", "text": "(Natural polite decline or reschedule in English)"},
+              {"label": "💬 Details / Question", "text": "(Time/place/details question in natural English)"},
+              {"label": "😄 Humor / Reaction", "text": "(Warm casual banter or reaction in natural English)"}
+            ]
+            """.trimIndent() else """
             2. 【全部「俺流」のトーン＆マナー】
                4案すべてが「ユーザー本人が実際にLINEで送るリアルな言葉遣い（短文・語尾・ツッコミ・テンポ）」でなければなりません。優等生AIのような敬語や定型文は【完全禁止】です。
             3. 【4大基本パターンの網羅】
@@ -175,6 +221,7 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
               {"label": "💬 俺流・質問調整", "text": "（時間・場所・詳細の質問）"},
               {"label": "😄 俺流・ツッコミ共感", "text": "（クスッと笑えるツッコミや労い）"}
             ]
+            """.trimIndent()}
             """.trimIndent()
         }
     }
@@ -287,12 +334,27 @@ class PersonaSynthesizerPlugin : IPersonaSynthesizerPlugin {
 
         // LINE context (Friends, Family, Everyday)
         if (context.isEnglishPartner) {
-            return listOf(
-                SmartReplyOption("🎯 YES / Agree", "Sounds awesome! Count me in 👍"),
-                SmartReplyOption("🙅‍♂️ NO / Alternative", "Ah can't make it today, how about next week?"),
-                SmartReplyOption("💬 Question / Details", "What time were you thinking? Where should we meet?"),
-                SmartReplyOption("😄 Wit / Reaction", "Haha that made my day! You always have the best stories 😂")
-            )
+            val q = latest.lowercase()
+            return when {
+                q.contains("time") || q.contains("when") || q.contains("what day") || q.contains("friday") || q.contains("tonight") || q.contains("weekend") -> listOf(
+                    SmartReplyOption("🎯 Direct YES", "Sounds great! 7 PM works perfect for me 👍"),
+                    SmartReplyOption("🙅‍♂️ Alternative NO", "Ah got plans then, how about next Tuesday?"),
+                    SmartReplyOption("💬 Details / Question", "What time were you thinking? Where should we meet?"),
+                    SmartReplyOption("😄 Humor / Reaction", "Haha I was literally just about to text you about that! Let's do it 🍻")
+                )
+                q.contains("where") || q.contains("place") || q.contains("restaurant") || q.contains("bar") || q.contains("spot") -> listOf(
+                    SmartReplyOption("🎯 Direct YES", "Anywhere around Shibuya or Ebisu is super convenient for me!"),
+                    SmartReplyOption("🙅‍♂️ Alternative NO", "That place might be packed, how about that quiet spot near the station?"),
+                    SmartReplyOption("💬 Details / Question", "What kind of food are you in the mood for? 😋"),
+                    SmartReplyOption("😄 Humor / Reaction", "As long as there's good food, count me in anywhere haha")
+                )
+                else -> listOf(
+                    SmartReplyOption("🎯 Direct YES", "Sounds awesome! Count me in 👍"),
+                    SmartReplyOption("🙅‍♂️ Alternative NO", "Ah tied up today, but super down for next week!"),
+                    SmartReplyOption("💬 Details / Question", "Haha tell me more, what happened?"),
+                    SmartReplyOption("😄 Humor / Reaction", "That made my day haha 😂 You're the best!")
+                )
+            }
         }
 
         return when {

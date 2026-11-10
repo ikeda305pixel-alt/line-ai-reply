@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.0.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.1.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,37 +46,32 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.0
-          name: LINE & Bumble AI Reply Assistant v1.5.0 (チャラさ完全排除・全部俺流4択・LINE/Bumble完全分離・過去ログ2.5倍深掘り版)
+          tag_name: v1.5.1
+          name: LINE & Bumble AI Reply Assistant v1.5.1 (英語話者対応・勝手なスクロール/タブ切り替わり/広告ジャンプ完全根絶版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.0 (チャラさ完全排除・全部俺流4択・LINE/Bumble完全分離版)
+            ## LINE & Bumble AI返信アシスタント v1.5.1 (英語話者対応・画面静止保証版)
 
-            ### 🚫 【チャラさ・恋愛工学の完全永久追放】全部「俺流」の等身大4択へ刷新
-            - **LINE（友達・家族・仕事・日常連絡）とBumble（マッチングアプリ）を完全分離**:
-              - LINEでは恋愛工学、ホスト風の転がし、キザな口説きを**100%永久排除**。
-              - 家族や男友達にそのまま送れる「等身大の俺（タメ口、短文、テンポ、親しみやすさ）」に統一。
-            - **人間の日常チャット基本4大パターンの完全網羅**:
-              1. 🎯 **【俺流・即答（YES / 了解）】**: 承諾、合意、快諾、感謝のド直球返信。（「おけ！行こ！」「了解〜！」「助かる、ありがとう！」）
-              2. 🙅‍♂️ **【俺流・代案（NO / 条件付き）】**: 角を立てずに断る、別日程・場所を提案する、または保留。（「その日先約あって厳しいわ！来週どう？」「今立て込んでるから後で連絡するわ！」）
-              3. 💬 **【俺流・質問調整】**: 話や予定を具体的に進めるための時間・場所・詳細の質問や日程調整。（「何時くらいになりそう？」「どこ集合にする？」「どんな店？」）
-              4. 😄 **【俺流・ツッコミ共感】**: 親しい間柄でのクスッと笑えるツッコミ、または素直な労い・共感。（「それ笑うんだけど😂 さすがだわ」「今日もお疲れ！無理すんなよ」）
-            - **Bumble専用の爽やか4択**:
-              - 🎯【俺流・ストレート即答】、☕️【俺流・共感質問】、😄【俺流・ツッコミ】、🚀/📲【俺流・爽やか提案/LINE交換】。
+            ### 🌐 【英語話者には100%自然なネイティブ英語で回答】
+            - **英語話者の高精度自動判定**:
+              - 相手のメッセージが英語（アルファベットのみ、または英語主体）の場合、短い挨拶（"Hey!", "How are you?"等）であっても確実に英語話者と判定。
+            - **LINE・Bumble両方で英語返信を完全サポート**:
+              - LINE: 🎯【Direct YES / Count me in】, 🙅‍♂️【Alternative NO / Reschedule】, 💬【Details / Question】, 😄【Humor / Reaction】
+              - Bumble: 🎯【Direct Answer】, ☕️【Connection & Question】, 😄【Witty Banter】, 🚀/📲【Casual Plan / Switch to LINE】
+              - 日本語が混入することなく、ユーザーの等身大でフレンドリーな自然体英語（スラング・テンポ感）で4択を生成。
 
-            ### 📈 【過去ログの遡りスパンを2倍以上に拡張】
-            - **トーク入室時の自律サイレント遡りスキャン**: 2画面 ➔ **5画面分（2.5倍！）** に拡張。
-            - **「過去ログ全同期」ディープスキャン**: 12画面 ➔ **24画面分（2倍！）** に拡張。
-            - **会話履歴保持件数**: 150件 ➔ **300件（2倍！）** に倍増。
-            - **ユーザー俺流文体サンプル**: 60件 ➔ **120件（2倍！）** に倍増。
-            - **プロンプト注入過去ログ数**: 80件 ➔ **120件** に拡大。過去の約束や話題をさらに長期記憶。
+            ### 🛑 【勝手なスクロール・タブ切り替え・広告ジャンプの完全根絶】
+            - **バックグラウンド自動スクロールの全廃**:
+              - 入室時や画面遷移時の自動スクロールを完全撤廃。バックグラウンド収集は表示中画面のパッシブ読み込み（画面の動き0ミリ）のみに限定。
+              - 画面が勝手に左右に動いたり、違うタブ（ニュース・VOOM・ウォレット）に切り替わったり、広告バナーに飛ぶ現象を100%根本根絶。
+            - **手動「過去ログ全同期」の垂直専用安全ガード**:
+              - トーク画面内（入力欄存在時）のみ動作保証。
+              - ViewPager、HorizontalScrollView、タブレイアウト、広告バナー、ステッカーカルーセルへのスクロールアクションを厳密に完全遮断。
 
-            ### 🛡️ 【P0バグ完全根絶済み（v1.4.6より継承）】
-            - 入力欄（EditText）下書きの誤混入防止。
-            - ユーザー長文（3行以上）の右端不変量判定。
-            - 自己返信・相槌の完全禁止。
+            ### 🛡️ 【固定署名キーストアによる直接更新】
+            - アプリのアンインストール不要で、そのまま「更新」を押すだけでアップデート完了。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.0.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.1.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

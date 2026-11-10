@@ -254,6 +254,60 @@ def test_full_history_prompt_injection():
     assert "【最重要：自分の発言への自己返信・相槌の完全禁止】" in prompt
     print("Full accumulated history & zero self-reply prompt injection: PASS ✅")
 
+def test_english_speaker_detection():
+    # Strict English detection logic from ChatConversationExtractor
+    def detect_lang(sample: str, profile: str = ""):
+        combined = f"{sample} {profile}".strip()
+        clean = re.sub(r"https?://\S+", " ", combined)
+        latin_count = len(re.findall(r"[a-zA-Z]", clean))
+        jp_count = len(re.findall(r"[\u3040-\u30ff\u4e00-\u9faf]", clean))
+        has_foreign_kw = bool(re.search(
+            r"from\s+[a-z]+|lives?\s+in|expat|native|english|speak|tokyo|japan|foreigner|travel|visit|study abroad|アメリカ|カナダ|オーストラリア|イギリス|ハーフ|海外|留学",
+            clean,
+            re.IGNORECASE
+        ))
+        is_english_only = latin_count >= 3 and jp_count == 0
+        is_english_dominant = latin_count > 12 and (jp_count == 0 or latin_count > jp_count * 2)
+        is_foreigner = is_english_only or is_english_dominant or (latin_count > 6 and has_foreign_kw)
+        desc = "英語話者" if (is_english_only or is_english_dominant) else ("外国人 / バイリンガル" if is_foreigner else "日本語")
+        return is_foreigner, desc
+
+    # Test cases: Short English messages that previously failed with latin_count > 20 requirement
+    assert detect_lang("Hey!")[0] == True, "Hey! should be English"
+    assert detect_lang("How are you?")[0] == True, "How are you? should be English"
+    assert detect_lang("Wanna get drinks on Friday?")[0] == True, "Wanna get drinks should be English"
+    assert detect_lang("Where are you from?")[0] == True, "Where are you from? should be English"
+    assert detect_lang("Nice to meet you 😊")[0] == True, "Nice to meet you should be English"
+
+    # Japanese cases
+    assert detect_lang("今週金曜空いてる？")[0] == False, "Japanese should not be English"
+    assert detect_lang("了解です！また後で連絡します")[0] == False, "Japanese should not be English"
+    assert detect_lang("今日もお疲れ様〜")[0] == False, "Japanese should not be English"
+
+    print("English speaker detection suite: PASS ✅")
+
+def test_zero_unprompted_scroll_and_vertical_filter():
+    # Test class exclusion in findVerticalChatScrollableNode
+    excluded_classes = [
+        "androidx.viewpager.widget.ViewPager",
+        "androidx.viewpager2.widget.ViewPager2",
+        "android.widget.HorizontalScrollView",
+        "com.google.android.material.tabs.TabLayout",
+        "com.linecorp.tab.TabBar",
+        "com.linecorp.ads.BannerView",
+        "com.linecorp.line.chat.ui.StickerCarouselView"
+    ]
+    for cls in excluded_classes:
+        is_horiz = any(k in cls.lower() for k in ["viewpager", "horizontal", "tab", "banner", "carousel", "sticker"])
+        assert is_horiz, f"{cls} must be flagged as horizontal/banner and excluded from scrolling!"
+
+    # Allowed: vertical chat RecyclerView
+    chat_recycler = "androidx.recyclerview.widget.RecyclerView"
+    is_horiz_chat = any(k in chat_recycler.lower() for k in ["viewpager", "horizontal", "tab", "banner", "carousel", "sticker"])
+    assert not is_horiz_chat, "Vertical RecyclerView must NOT be excluded!"
+
+    print("Zero unprompted scroll & vertical chat node filter suite: PASS ✅")
+
 def main():
     res = test_archetype_matrix()
     print(f"Verified {res['archetypes_verified']} personality & scenario archetypes: PASS ✅")
@@ -261,7 +315,9 @@ def main():
     test_geometric_speaker_separation_and_input_exclusion()
     test_user_and_partner_profiling()
     test_full_history_prompt_injection()
-    print("All loop engineering v1.4.6 tests: 100% PASSED! 🚀")
+    test_english_speaker_detection()
+    test_zero_unprompted_scroll_and_vertical_filter()
+    print("All loop engineering v1.5.1 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

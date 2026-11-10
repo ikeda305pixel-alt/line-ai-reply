@@ -177,7 +177,12 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         val lastTurn = messageTurns.lastOrNull()
         val lastMessageIsMe = lastTurn != null && !lastTurn.isPartner
 
-        val combinedSample = (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
+        val partnerSample = partnerTurns.takeLast(4).joinToString(" ") { it.text }
+        val combinedSample = if (partnerSample.isNotBlank()) {
+            "$partnerSample ${latestPartnerMessage}"
+        } else {
+            (messageTurns.takeLast(6).map { it.text }).joinToString(" ")
+        }
         val (isForeignOrEnglish, languageDesc) = detectLanguageBackground(combinedSample, finalProfile)
 
         val messageCount = messageTurns.size
@@ -218,11 +223,15 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             RegexOption.IGNORE_CASE
         ).containsMatchIn(cleanText)
 
-        val isEnglishDominant = latinCount > 20 && (japaneseCount == 0 || latinCount > japaneseCount * 2)
-        val isForeigner = isEnglishDominant || (latinCount > 10 && hasForeignKeywords)
+        // Strict English speaker detection:
+        // 1. Any message with Latin alphabet (>= 3 chars) and NO Japanese characters is an English speaker.
+        // 2. Or dominant English ratio (latinCount > japaneseCount * 2).
+        val isEnglishOnly = latinCount >= 3 && japaneseCount == 0
+        val isEnglishDominant = latinCount > 12 && (japaneseCount == 0 || latinCount > japaneseCount * 2)
+        val isForeigner = isEnglishOnly || isEnglishDominant || (latinCount > 6 && hasForeignKeywords)
 
         val desc = when {
-            isEnglishDominant -> "英語"
+            isEnglishOnly || isEnglishDominant -> "英語話者"
             isForeigner -> "外国人 / バイリンガル"
             else -> "日本語"
         }
@@ -322,7 +331,8 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
         return false
     }
 
-    private fun findInputEditText(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    fun findInputEditText(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         while (queue.isNotEmpty()) {
@@ -336,5 +346,9 @@ object ChatConversationExtractor : IConversationHarvesterPlugin {
             }
         }
         return null
+    }
+
+    fun isChatRoom(root: AccessibilityNodeInfo?): Boolean {
+        return findInputEditText(root) != null
     }
 }

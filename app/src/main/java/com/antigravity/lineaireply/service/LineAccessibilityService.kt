@@ -83,11 +83,10 @@ class LineAccessibilityService : AccessibilityService() {
                 handleBubbleClicked(platform, pkg)
             }
 
-            // Autonomous zero-click continuous background harvesting:
-            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                autonomousQuickHistoryHarvest(pkg)
-            } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
-                       event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             ) {
                 harvestCurrentScreenAsync(pkg)
             }
@@ -124,70 +123,8 @@ class LineAccessibilityService : AccessibilityService() {
         }
     }
 
-    private var lastAutoScanRoom = ""
-    private var lastAutoScanTimestamp = 0L
-
-    /**
-     * Silently and autonomously harvests readable conversation history when a chat room is opened.
-     */
-    private fun autonomousQuickHistoryHarvest(pkg: String) {
-        val now = System.currentTimeMillis()
-        if (now - lastAutoScanTimestamp < 4000) return
-
-        serviceScope.launch(Dispatchers.Main) {
-            val root = rootInActiveWindow ?: return@launch
-            val metrics = resources.displayMetrics
-            val initialContext = ChatConversationExtractor.extract(
-                root, pkg, metrics.widthPixels, metrics.heightPixels
-            ) ?: return@launch
-
-            val partnerName = initialContext.partnerName
-            if (partnerName.isBlank() || partnerName == lastAutoScanRoom) {
-                val turns = initialContext.allMessageTurns.ifEmpty { initialContext.conversationHistory }
-                if (turns.isNotEmpty()) {
-                    memoryManager.recordScreenTurns(partnerName, turns)
-                }
-                return@launch
-            }
-
-            lastAutoScanRoom = partnerName
-            lastAutoScanTimestamp = now
-
-            // 1. Record current screen immediately
-            val initialTurns = initialContext.allMessageTurns.ifEmpty { initialContext.conversationHistory }
-            if (initialTurns.isNotEmpty()) {
-                memoryManager.recordScreenTurns(partnerName, initialTurns)
-            }
-
-            // 2. Silently scroll up 5 times (2.5x deeper) to capture previous readable history
-            for (step in 1..5) {
-                val scrollable = findScrollableNode(rootInActiveWindow)
-                val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) ?: false
-                if (!scrolled) break
-                kotlinx.coroutines.delay(180)
-                val upRoot = rootInActiveWindow
-                if (upRoot != null) {
-                    val upContext = ChatConversationExtractor.extract(
-                        upRoot, pkg, metrics.widthPixels, metrics.heightPixels
-                    )
-                    if (upContext != null) {
-                        val upTurns = upContext.allMessageTurns.ifEmpty { upContext.conversationHistory }
-                        if (upTurns.isNotEmpty()) {
-                            memoryManager.recordScreenTurns(partnerName, upTurns)
-                        }
-                    }
-                }
-            }
-
-            // 3. Scroll back down to return to the bottom of the conversation
-            for (step in 1..5) {
-                val scrollable = findScrollableNode(rootInActiveWindow)
-                val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ?: false
-                if (!scrolled) break
-                kotlinx.coroutines.delay(100)
-            }
-        }
-    }
+    // Silent, 100% non-intrusive background screen harvester.
+    // NEVER moves the screen, NEVER scrolls, NEVER switches tabs or triggers ads.
 
     private var lastHarvestTime = 0L
     private fun harvestCurrentScreenAsync(pkg: String) {
@@ -249,14 +186,36 @@ class LineAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun findScrollableNode(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+    /**
+     * Finds strictly vertical chat message scrollable node (e.g. RecyclerView / ListView).
+     * Explicitly EXCLUDES horizontal pagers (ViewPager, ViewPager2), tab layouts, and banner ads.
+     */
+    private fun findVerticalChatScrollableNode(
+        root: AccessibilityNodeInfo?,
+        screenWidth: Int,
+        screenHeight: Int
+    ): AccessibilityNodeInfo? {
         if (root == null) return null
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
-            if (node.isScrollable) {
-                return node
+            val cls = node.className?.toString() ?: ""
+            val isHorizontalOrBanner = cls.contains("ViewPager", ignoreCase = true) ||
+                    cls.contains("Horizontal", ignoreCase = true) ||
+                    cls.contains("Tab", ignoreCase = true) ||
+                    cls.contains("Banner", ignoreCase = true) ||
+                    cls.contains("Carousel", ignoreCase = true) ||
+                    cls.contains("Sticker", ignoreCase = true)
+
+            if (!isHorizontalOrBanner && node.isScrollable) {
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+                // A chat message list is tall and predominantly vertical
+                val isTallVertical = rect.height() >= (screenHeight * 0.35) && rect.height() >= (rect.width() * 0.6)
+                if (isTallVertical) {
+                    return node
+                }
             }
             for (i in 0 until node.childCount) {
                 node.getChild(i)?.let { queue.add(it) }
@@ -267,17 +226,28 @@ class LineAccessibilityService : AccessibilityService() {
 
     private fun autoScanAndLearnAllHistory(pkg: String) {
         serviceScope.launch(Dispatchers.Main) {
+            val initialRoot = rootInActiveWindow
+            if (!ChatConversationExtractor.isChatRoom(initialRoot)) {
+                Toast.makeText(this@LineAccessibilityService, "⚠️ チャットのトーク画面を開いた状態で実行してください", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
             Toast.makeText(this@LineAccessibilityService, "🤖 過去ログを遡り自動同期中...", Toast.LENGTH_SHORT).show()
             val allHarvestedTurns = mutableListOf<MessageTurn>()
             var partnerName = ""
             val metrics = resources.displayMetrics
 
-            // Scroll backwards (upwards) up to 24 times (2x deeper) to harvest complete historical conversation
+            // Scroll backwards (upwards) up to 24 times to harvest complete historical conversation
             for (step in 1..24) {
-                val root = rootInActiveWindow
-                if (root != null) {
+                val currentRoot = rootInActiveWindow
+                if (!ChatConversationExtractor.isChatRoom(currentRoot)) {
+                    // Abort immediately if user leaves chat room to avoid any unwanted scrolling
+                    break
+                }
+
+                if (currentRoot != null) {
                     val chatContext = ChatConversationExtractor.extract(
-                        root, pkg, metrics.widthPixels, metrics.heightPixels
+                        currentRoot, pkg, metrics.widthPixels, metrics.heightPixels
                     )
                     if (chatContext != null) {
                         if (partnerName.isEmpty() && chatContext.partnerName.isNotBlank()) {
@@ -292,7 +262,7 @@ class LineAccessibilityService : AccessibilityService() {
                     }
                 }
 
-                val currentScroll = findScrollableNode(rootInActiveWindow)
+                val currentScroll = findVerticalChatScrollableNode(currentRoot, metrics.widthPixels, metrics.heightPixels)
                 val scrolled = currentScroll?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) ?: false
                 if (!scrolled) {
                     break
