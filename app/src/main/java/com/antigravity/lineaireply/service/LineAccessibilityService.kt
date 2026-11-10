@@ -68,58 +68,42 @@ class LineAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (pkg == PKG_LINE || pkg == PKG_BUMBLE || pkg == packageName) {
-            val platform = when (pkg) {
-                PKG_BUMBLE -> "Bumble"
-                else -> "LINE"
-            }
+        if (pkg == PKG_LINE || pkg == PKG_BUMBLE) {
+            val root = rootInActiveWindow
+            val isInChatRoom = ChatConversationExtractor.isChatRoom(root)
 
-            // In Bumble, continuously cache profile prompts if visible
-            if (pkg == PKG_BUMBLE) {
-                ChatConversationExtractor.cacheProfileIfVisible(rootInActiveWindow)
-            }
+            if (isInChatRoom) {
+                val platform = when (pkg) {
+                    PKG_BUMBLE -> "Bumble"
+                    else -> "LINE"
+                }
 
-            // Always show floating bubble when user is in LINE / Bumble
-            overlayManager.showBubble(platform) {
-                handleBubbleClicked(platform, pkg)
-            }
+                // In Bumble, continuously cache profile prompts if visible
+                if (pkg == PKG_BUMBLE) {
+                    ChatConversationExtractor.cacheProfileIfVisible(root)
+                }
 
-            // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
-            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-                event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
-                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            ) {
-                harvestCurrentScreenAsync(pkg)
-            }
-
-            // Also trigger if user taps directly on a partner message bubble on the left
-            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-                val source = event.source
-                val cls = source?.className?.toString() ?: ""
-                // STRICT CHECK: Never treat input field / EditText or user right-side messages as partner click!
-                if (source != null && !source.isEditable && !cls.contains("EditText", ignoreCase = true)) {
-                    val rect = android.graphics.Rect()
-                    source.getBoundsInScreen(rect)
-                    val metrics = resources.displayMetrics
-                    val effectiveWidth = metrics.widthPixels
-                    val rightMargin = effectiveWidth - rect.right
-                    // ONLY allow left side (Partner message, rightMargin > 15% width)!
-                    if (rightMargin > effectiveWidth * 0.15) {
-                        val clickedText = source.text?.toString()?.trim() ?: ""
-                        if (clickedText.length in 2..200) {
-                            val root = rootInActiveWindow
-                            val chatContext = ChatConversationExtractor.extract(
-                                root, pkg, metrics.widthPixels, metrics.heightPixels
-                            )
-                            if (chatContext != null) {
-                                triggerReplySuggestions(chatContext.copy(latestPartnerMessage = clickedText))
-                            }
-                        }
+                // Show floating bubble ONLY when replies modal is not open
+                if (!overlayManager.isRepliesShowing()) {
+                    overlayManager.showBubble(platform) {
+                        handleBubbleClicked(platform, pkg)
                     }
                 }
+
+                // Autonomous zero-click continuous background harvesting (100% passive, zero unexpected scrolling):
+                if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                    event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+                    event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                ) {
+                    harvestCurrentScreenAsync(pkg)
+                }
+            } else {
+                // User is in LINE/Bumble but outside talk room (e.g. Talk list, Home, News, VOOM, Settings)
+                // HIDE IMMEDIATELY so it never gets in the user's way!
+                overlayManager.hideAll()
             }
         } else {
-            // User switched to another app (Home, Chrome, etc.)
+            // User switched to another app (Home, Chrome, YouTube, etc.) -> HIDE ALL IMMEDIATELY
             overlayManager.hideAll()
         }
     }
@@ -293,6 +277,8 @@ class LineAccessibilityService : AccessibilityService() {
         }
     }
 
+    private var replyJob: Job? = null
+
     private fun triggerReplySuggestions(
         chatContext: ChatContext,
         forceLineInvite: Boolean = false
@@ -313,7 +299,9 @@ class LineAccessibilityService : AccessibilityService() {
         val accumulatedCount = memoryManager.getAccumulatedTurnCount(chatContext.partnerName)
         val partnerDossier = memoryManager.getPartnerDossier(chatContext.partnerName)
 
-        serviceScope.launch {
+        // Cancel previous in-flight reply generation to guarantee no duplicate displays
+        replyJob?.cancel()
+        replyJob = serviceScope.launch {
             val result = assistant.generateReplies(chatContext, forceLineInvite = willInvite)
 
             val summary = if (isBumble) {
@@ -348,22 +336,22 @@ class LineAccessibilityService : AccessibilityService() {
                 partnerMessage = chatContext.latestPartnerMessage,
                 profilePreview = profilePreview,
                 options = result.options,
-                showQuickInviteButton = isBumble && !willInvite,
-                accumulatedTurnsCount = accumulatedCount,
                 onSelect = { selectedText ->
                     overlayManager.insertTextIntoInput(chatContext.inputNode, selectedText)
                 },
                 onRegenerate = {
                     triggerReplySuggestions(chatContext, forceLineInvite = willInvite)
                 },
-                onQuickLineInvite = {
-                    triggerReplySuggestions(chatContext, forceLineInvite = true)
-                },
                 onDirectType = {
                     chatContext.inputNode?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 },
-                onAutoScanHistory = {
-                    autoScanAndLearnAllHistory(if (isBumble) PKG_BUMBLE else PKG_LINE)
+                onDismiss = {
+                    val currentRoot = rootInActiveWindow
+                    if (ChatConversationExtractor.isChatRoom(currentRoot)) {
+                        overlayManager.showBubble(chatContext.platform) {
+                            handleBubbleClicked(chatContext.platform, if (isBumble) PKG_BUMBLE else PKG_LINE)
+                        }
+                    }
                 }
             )
         }

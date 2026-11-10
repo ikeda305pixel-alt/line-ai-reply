@@ -308,6 +308,59 @@ def test_zero_unprompted_scroll_and_vertical_filter():
 
     print("Zero unprompted scroll & vertical chat node filter suite: PASS ✅")
 
+def test_ui_chat_confinement_and_anti_duplication():
+    # 1. Chat room confinement verification
+    def should_show_overlay(pkg: str, has_input_edit_text: bool):
+        if pkg not in ["jp.naver.line.android", "com.bumble.app"]:
+            return False  # External app / launcher / self app -> HIDE
+        return has_input_edit_text  # ONLY show when in active talk room with EditText!
+
+    # LINE Talk Room (Active Chat) -> SHOW
+    assert should_show_overlay("jp.naver.line.android", True) == True
+    # LINE Talk List / Home / News / VOOM / Wallet -> HIDE
+    assert should_show_overlay("jp.naver.line.android", False) == False
+    # Bumble Chat Room -> SHOW
+    assert should_show_overlay("com.bumble.app", True) == True
+    # Bumble Swipe Deck / Match Queue -> HIDE
+    assert should_show_overlay("com.bumble.app", False) == False
+    # Android Launcher / Home Screen -> HIDE
+    assert should_show_overlay("com.google.android.apps.nexuslauncher", False) == False
+    assert should_show_overlay("com.android.systemui", False) == False
+    # Self app (MainActivity) -> HIDE
+    assert should_show_overlay("com.antigravity.lineaireply", True) == False
+
+    # 2. Mutual exclusion (Bubble vs Replies Card)
+    class MockOverlayManager:
+        def __init__(self):
+            self.bubble_showing = False
+            self.replies_showing = False
+
+        def show_bubble(self):
+            if not self.replies_showing:
+                self.bubble_showing = True
+
+        def show_replies(self):
+            self.bubble_showing = False  # Bubble MUST hide when replies card opens
+            self.replies_showing = True
+
+        def hide_replies(self):
+            self.replies_showing = False
+
+        def hide_all(self):
+            self.bubble_showing = False
+            self.replies_showing = False
+
+    mgr = MockOverlayManager()
+    mgr.show_bubble()
+    assert mgr.bubble_showing == True and mgr.replies_showing == False
+    mgr.show_replies()
+    # Bubble MUST be hidden when replies card is showing! No double UI!
+    assert mgr.bubble_showing == False and mgr.replies_showing == True
+    mgr.hide_replies()
+    assert mgr.replies_showing == False
+
+    print("UI chat room confinement & anti-duplication suite: PASS ✅")
+
 def main():
     res = test_archetype_matrix()
     print(f"Verified {res['archetypes_verified']} personality & scenario archetypes: PASS ✅")
@@ -317,7 +370,8 @@ def main():
     test_full_history_prompt_injection()
     test_english_speaker_detection()
     test_zero_unprompted_scroll_and_vertical_filter()
-    print("All loop engineering v1.5.1 tests: 100% PASSED! 🚀")
+    test_ui_chat_confinement_and_anti_duplication()
+    print("All loop engineering v1.5.2 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

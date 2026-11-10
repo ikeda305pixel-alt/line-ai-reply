@@ -102,11 +102,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val overlay = SmartOverlayManager(this)
-            overlay.showBubble("LINE") {
-                Toast.makeText(this, "バブルが正常に動作しています！LINEでも同様に画面端に表示されます", Toast.LENGTH_SHORT).show()
-            }
-            Toast.makeText(this, "画面端に「💬」バブルを表示しました！タップしてみてください", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "✅ 「重ねて表示」許可済みです！\nLINEやBumbleで「トーク画面」を開くと、画面端に「💬」ボタンが自動表示されます（トーク画面外では邪魔にならないよう自動で非表示になります）",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         btnTestApiKey.setOnClickListener {

@@ -111,20 +111,22 @@ class SmartOverlayManager(private val context: Context) {
         }
     }
 
+    fun isRepliesShowing(): Boolean = cardView != null
+
     fun showReplies(
         platform: String,
         summaryText: String,
         partnerMessage: String = "",
         profilePreview: String = "",
         options: List<SmartReplyOption>,
-        showQuickInviteButton: Boolean = false,
-        accumulatedTurnsCount: Int = 0,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
-        onQuickLineInvite: () -> Unit,
         onDirectType: () -> Unit,
-        onAutoScanHistory: (() -> Unit)? = null
+        onDismiss: (() -> Unit)? = null
     ) {
+        // Hide the floating trigger bubble while the reply modal is active to prevent duplicate UI
+        hideBubble()
+
         if (cardView == null) {
             val inflater = LayoutInflater.from(context)
             val view = inflater.inflate(R.layout.overlay_line_replies, null)
@@ -203,56 +205,24 @@ class SmartOverlayManager(private val context: Context) {
                 btn.visibility = View.VISIBLE
                 btn.text = "${opt.label}\n${opt.text}"
                 btn.setOnClickListener {
-                    onSelect(opt.text)
                     hideReplies()
+                    onSelect(opt.text)
+                    onDismiss?.invoke()
                 }
             } else {
                 btn.visibility = View.GONE
             }
         }
 
-        val btnQuickInvite = v.findViewById<Button>(R.id.btnQuickLineInvite)
-        if (showQuickInviteButton) {
-            btnQuickInvite.visibility = View.VISIBLE
-            btnQuickInvite.setOnClickListener {
-                onQuickLineInvite()
-            }
-        } else {
-            btnQuickInvite.visibility = View.GONE
-        }
-
-        v.findViewById<View>(R.id.btnAutoScanHistory)?.let { btn ->
-            btn.visibility = View.VISIBLE
-            val badgeText = if (accumulatedTurnsCount > 0) {
-                "✅ ログ自動蓄積: ${accumulatedTurnsCount}件"
-            } else {
-                "✅ ログ全自動蓄積中"
-            }
-            if (btn is Button) {
-                btn.text = badgeText
-            } else if (btn is TextView) {
-                btn.text = badgeText
-            }
-            btn.setOnClickListener {
-                val msg = if (accumulatedTurnsCount > 0) {
-                    "✅ この相手との過去全ログ（${accumulatedTurnsCount}件）を完全自動蓄積済みです。AIが全履歴を把握して返信しています。"
-                } else {
-                    "✅ 画面のやり取りを自動で蓄積・学習しています。"
-                }
-                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                if (onAutoScanHistory != null) {
-                    onAutoScanHistory()
-                }
-            }
-        }
-
         v.findViewById<View>(R.id.btnClose).setOnClickListener {
             hideReplies()
+            onDismiss?.invoke()
         }
 
         v.findViewById<View>(R.id.btnDirectType).setOnClickListener {
             hideReplies()
             onDirectType()
+            onDismiss?.invoke()
         }
 
         v.findViewById<View>(R.id.btnRegenerate).setOnClickListener {

@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.1.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.2.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,32 +46,34 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.1
-          name: LINE & Bumble AI Reply Assistant v1.5.1 (英語話者対応・勝手なスクロール/タブ切り替わり/広告ジャンプ完全根絶版)
+          tag_name: v1.5.2
+          name: LINE & Bumble AI Reply Assistant v1.5.2 (トーク画面限定表示・ボタン重複解消・UI抜本改善版)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.1 (英語話者対応・画面静止保証版)
+            ## LINE & Bumble AI返信アシスタント v1.5.2 (トーク画面限定表示・UI二重化根絶版)
 
-            ### 🌐 【英語話者には100%自然なネイティブ英語で回答】
-            - **英語話者の高精度自動判定**:
-              - 相手のメッセージが英語（アルファベットのみ、または英語主体）の場合、短い挨拶（"Hey!", "How are you?"等）であっても確実に英語話者と判定。
-            - **LINE・Bumble両方で英語返信を完全サポート**:
-              - LINE: 🎯【Direct YES / Count me in】, 🙅‍♂️【Alternative NO / Reschedule】, 💬【Details / Question】, 😄【Humor / Reaction】
-              - Bumble: 🎯【Direct Answer】, ☕️【Connection & Question】, 😄【Witty Banter】, 🚀/📲【Casual Plan / Switch to LINE】
-              - 日本語が混入することなく、ユーザーの等身大でフレンドリーな自然体英語（スラング・テンポ感）で4択を生成。
+            ### 💬 【トーク画面（チャットルーム）限定表示の徹底】
+            - **アプリ外・一覧画面での常駐バブルを完全排除**:
+              - ホーム画面（ランチャー）や他アプリはもちろん、LINE/Bumble内の「トーク一覧」「ホーム」「ニュース」「VOOM」「ウォレット」などトーク画面外ではバブルを即座に完全非表示（`hideAll()`）。
+              - 実際の「トーク画面（チャットルーム）」に入り入力欄が存在する時のみ、控えめにフローティングバブル（💬）を表示します。
 
-            ### 🛑 【勝手なスクロール・タブ切り替え・広告ジャンプの完全根絶】
-            - **バックグラウンド自動スクロールの全廃**:
-              - 入室時や画面遷移時の自動スクロールを完全撤廃。バックグラウンド収集は表示中画面のパッシブ読み込み（画面の動き0ミリ）のみに限定。
-              - 画面が勝手に左右に動いたり、違うタブ（ニュース・VOOM・ウォレット）に切り替わったり、広告バナーに飛ぶ現象を100%根本根絶。
-            - **手動「過去ログ全同期」の垂直専用安全ガード**:
-              - トーク画面内（入力欄存在時）のみ動作保証。
-              - ViewPager、HorizontalScrollView、タブレイアウト、広告バナー、ステッカーカルーセルへのスクロールアクションを厳密に完全遮断。
+            ### 🎯 【ボタン二重表示（重複表示）の完全根絶】
+            - **フローティングバブルと返信カードの完全排他制御**:
+              - 返信カード表示中はバブルを即座に非表示にし、画面上にボタンが二重に見える不快感を解消。返信カードを閉じた際にのみ安全にバブルが復帰します。
+            - **イベント二重発火・重複Jobの防止**:
+              - 返信ボタンタップ時のアクセシビリティ誤爆リスナーを撤廃し、先行する返信生成タスクを明示的にキャンセル（`replyJob?.cancel()`）することで、返信カードが多重に重なる現象を防止。
+            - **洗練されたクリーンなUI**:
+              - Bumble時の案4（LINE交換）と重複していた下部バーの「LINE誘う」ボタンや不要な設定ボタンを削除。
+              - 「タップで入力欄にセットされます」「🔄 別の案」「✍️ 手動入力」の直感的で美しいUIに刷新。
 
-            ### 🛡️ 【固定署名キーストアによる直接更新】
-            - アプリのアンインストール不要で、そのまま「更新」を押すだけでアップデート完了。
+            ### 🌐 【英語話者へのネイティブ英語返信＆画面静止保証】
+            - 英語メッセージには100%自然なネイティブ英語4択で回答。
+            - バックグラウンドでの勝手な左右スクロール・タブ切り替わり・広告ジャンプはゼロ。
+
+            ### 🛡️ 【固定署名キーストアによる直接「更新」】
+            - アプリのアンインストール不要で、そのまま「更新」を押すだけで即座にアップデート完了。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.1.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.2.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
