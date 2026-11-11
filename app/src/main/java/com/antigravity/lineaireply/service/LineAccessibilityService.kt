@@ -78,8 +78,8 @@ class LineAccessibilityService : AccessibilityService() {
         fun getRestoreIntent(context: Context): Intent {
             val myComponent = ComponentName(context, LineAccessibilityService::class.java).flattenToString()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val detailIntent = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
-                    putExtra(Intent.EXTRA_COMPONENT_NAME, myComponent)
+                val detailIntent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
+                    putExtra("android.intent.extra.COMPONENT_NAME", myComponent)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 if (context.packageManager.resolveActivity(detailIntent, 0) != null) {
