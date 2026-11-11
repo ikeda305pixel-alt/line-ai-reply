@@ -3,7 +3,6 @@ package com.antigravity.lineaireply
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +19,7 @@ import com.antigravity.lineaireply.ai.ConversationMemoryManager
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.SmartChatAssistant
 import com.antigravity.lineaireply.service.FloatingBubbleService
+import com.antigravity.lineaireply.service.LineNotificationListenerService
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -29,28 +29,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var guard: FreeTierGuard
     private lateinit var memoryManager: ConversationMemoryManager
-    private lateinit var mediaProjectionManager: MediaProjectionManager
-
-    private val screenCaptureLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK && result.data != null) {
-            val serviceIntent = Intent(this, FloatingBubbleService::class.java).apply {
-                action = FloatingBubbleService.ACTION_START
-                putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, result.resultCode)
-                putExtra(FloatingBubbleService.EXTRA_RESULT_DATA, result.data)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-            Toast.makeText(this, "🚀 バブルを起動しました！画面端の💬をタップしてください", Toast.LENGTH_SHORT).show()
-            updateUIState()
-        } else {
-            Toast.makeText(this, "⚠️ 画面キャプチャの許可がキャンセルされました", Toast.LENGTH_SHORT).show()
-        }
-    }
 
     private val openTxtLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -67,11 +45,11 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences("line_ai_prefs", Context.MODE_PRIVATE)
         guard = FreeTierGuard(this)
         memoryManager = ConversationMemoryManager(this)
-        mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         val tvAppVersion = findViewById<TextView>(R.id.tvAppVersion)
         val btnCheckUpdate = findViewById<Button>(R.id.btnCheckUpdate)
         val btnOpenOverlay = findViewById<Button>(R.id.btnOpenOverlay)
+        val btnOpenNotificationAccess = findViewById<Button>(R.id.btnOpenNotificationAccess)
         val btnStartBubble = findViewById<Button>(R.id.btnStartBubble)
         val btnStopBubble = findViewById<Button>(R.id.btnStopBubble)
         val editKey = findViewById<EditText>(R.id.editGeminiApiKey)
@@ -110,6 +88,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnOpenNotificationAccess.setOnClickListener {
+            if (!LineNotificationListenerService.isNotificationAccessGranted(this)) {
+                startActivity(LineNotificationListenerService.getSettingsIntent())
+            } else {
+                Toast.makeText(this, "通知へのアクセスは既に許可されています ✅", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         btnStartBubble.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "⚠️ 先に「1. 重ねて表示を許可」してください", Toast.LENGTH_LONG).show()
@@ -121,7 +107,24 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+            if (!LineNotificationListenerService.isNotificationAccessGranted(this)) {
+                Toast.makeText(
+                    this,
+                    "💡 「2. 通知へのアクセス」を許可すると、LINEメッセージを自動認識できます",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
+            val serviceIntent = Intent(this, FloatingBubbleService::class.java).apply {
+                action = FloatingBubbleService.ACTION_START
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            Toast.makeText(this, "🚀 返信バブルを起動しました！画面端の💬をタップしてください", Toast.LENGTH_SHORT).show()
+            updateUIState()
         }
 
         btnStopBubble.setOnClickListener {
@@ -206,6 +209,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateUIState() {
         val tvBubbleStatus = findViewById<TextView>(R.id.tvBubbleStatus)
         val btnOpenOverlay = findViewById<Button>(R.id.btnOpenOverlay)
+        val btnOpenNotificationAccess = findViewById<Button>(R.id.btnOpenNotificationAccess)
         val textFreeTierStatus = findViewById<TextView>(R.id.textFreeTierStatus)
         val textUserStyleStatus = findViewById<TextView>(R.id.textUserStyleStatus)
 
@@ -214,6 +218,13 @@ class MainActivity : AppCompatActivity() {
             btnOpenOverlay.text = "1. 重ねて表示: 許可済み ✅"
         } else {
             btnOpenOverlay.text = getString(R.string.btn_open_overlay)
+        }
+
+        // Notification access status
+        if (LineNotificationListenerService.isNotificationAccessGranted(this)) {
+            btnOpenNotificationAccess.text = "2. 通知へのアクセス: 許可済み ✅"
+        } else {
+            btnOpenNotificationAccess.text = getString(R.string.btn_open_notification_access)
         }
 
         // Bubble service running status

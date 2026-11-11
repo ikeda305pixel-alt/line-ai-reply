@@ -8,7 +8,7 @@
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Header with context preview -->
+    <!-- Header: Platform Tag, Summary, and Close Button -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -35,7 +35,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="会話の流れを考慮中..."
+            android:text="通知キャッシュからコンテキスト取得中..."
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
 
@@ -46,10 +46,99 @@
             android:gravity="center"
             android:text="✕"
             android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+            android:textSize="16sp" />
     </LinearLayout>
 
-    <!-- Partner's latest message preview -->
+    <!-- Room / Partner Selector (Horizontal scrollable chips) -->
+    <HorizontalScrollView
+        android:id="@+id/scrollRooms"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/layoutRoomChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <!-- 4 Mode Action Selector Bar (返信提案 / 日程調整 / 話題提案 / ムード分析) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnModeReply"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="@color/line_green"
+                android:paddingHorizontal="10dp"
+                android:text="💬 返信提案"
+                android:textColor="@color/white"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnModeSchedule"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:paddingHorizontal="10dp"
+                android:text="📅 日程調整"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnModeTopic"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:paddingHorizontal="10dp"
+                android:text="💡 話題提案"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnModeMood"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:paddingHorizontal="10dp"
+                android:text="🎭 ムード分析"
+                android:textColor="@color/text_primary"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Clipboard text priority preview (visible when clipboard contains text) -->
+    <TextView
+        android:id="@+id/textClipboardPreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="#FEF3C7"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="📋 コピー文を反映: 「...」"
+        android:textColor="#92400E"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <!-- Partner's latest messages preview from Notification Cache -->
     <TextView
         android:id="@+id/textPartnerMessagePreview"
         android:layout_width="match_parent"
@@ -59,8 +148,8 @@
         android:paddingHorizontal="10dp"
         android:paddingVertical="5dp"
         android:ellipsize="end"
-        android:maxLines="2"
-        android:text="相手の発言: 「...」"
+        android:maxLines="3"
+        android:text="相手の直近通知: 「...」"
         android:textColor="@color/text_primary"
         android:textSize="11sp" />
 
@@ -133,7 +222,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="タップで入力欄にセットされます"
+            android:text="タップでクリップボードに自動コピー"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
 

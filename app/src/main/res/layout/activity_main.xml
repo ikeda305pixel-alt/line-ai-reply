@@ -36,7 +36,7 @@
                 android:paddingTop="4dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="4dp"
-                android:text="v1.6.0"
+                android:text="v1.7.0"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -46,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="画面キャプチャ＆Gemini Visionによる高精度AI返信アシスタント"
+            android:text="通知キャッシュ＆クリップボード連携による超高速AI返信アシスタント"
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
@@ -60,7 +60,7 @@
             android:textColor="@color/line_green_dark"
             android:textSize="12sp" />
 
-        <!-- Security & Bank/PayPay Safety Banner -->
+        <!-- Security & Bank/PayPay & Android 15 Privacy Protection Banner -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -80,7 +80,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🛡️ PayPay・銀行アプリ完全両立対応"
+                    android:text="🛡️ Android 15画面保護＆PayPay完全両立対応"
                     android:textColor="#065F46"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -89,7 +89,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="AccessibilityService（ユーザー補助）を100%撤廃しました。PayPayや金融機関アプリのセキュリティ警告・利用制限に一切抵触せず、常にそのままご利用いただけます。"
+                    android:text="画面録画（MediaProjection）とユーザー補助（AccessibilityService）を完全撤廃しました。OS画面共有制限による黒画面ブロックも、PayPayや銀行アプリの利用制限も100%発生せず、安全快適にご利用いただけます。"
                     android:textColor="#047857"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -140,6 +140,14 @@
                     android:text="@string/btn_open_overlay" />
 
                 <Button
+                    android:id="@+id/btnOpenNotificationAccess"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/btn_open_notification_access" />
+
+                <Button
                     android:id="@+id/btnStartBubble"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -163,7 +171,7 @@
                     android:layout_marginTop="10dp"
                     android:background="#FEF3C7"
                     android:padding="10dp"
-                    android:text="💡 使い方：\n① [バブル起動] をタップして画面キャプチャを許可すると、画面端に『💬』バブルが出現します（ドラッグで移動可能）。\n② LINE等のトーク画面で『💬』をタップすると、画面内容をGeminiが瞬時に解析し、文脈に合った3パターンの返信案を表示します。\n③ 返信案をタップするとクリップボードにコピーされますので、LINEの入力欄に貼り付けて送信してください。\n※ 画面上部の通知バーからもいつでもバブルの停止・再開が可能です。"
+                    android:text="💡 使い方：\n① [1. 重ねて表示] と [2. 通知へのアクセス] を許可し、[3. 返信バブルを起動] をタップ。\n② LINEやBumbleでメッセージ通知を受信すると、最新のトーク履歴が自動でアプリ内に安全キャッシュされます。\n③ トーク画面で画面端の『💬』バブルをタップすると、[💬返信提案][📅日程調整][💡話題提案][🎭ムード分析] の4つのモードで返信案を瞬時に生成！\n④ 複数人のトークも、ポップアップ上部の名前チップでワンタップ切り替え可能。\n⑤ LINEのメッセージを長押しコピーしておくと、コピーした内容をAIが最優先で反映して返信します。"
                     android:textColor="#92400E"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -335,7 +343,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="3dp"
-                    android:text="1. 上記の「バブル起動」ボタンを押し、画面キャプチャを許可します。\n2. LINEまたはBumbleを開き、相手とのトーク画面を表示します。\n3. 画面端の「💬」バブルをタップします。\n4. Gemini Visionが画面を直接見て、相手のメッセージ、敬語・タメ口のトーン、写真の内容、相手のプロフィール文脈を把握して3パターンの返信案を提示します。\n5. 好きな返信案をタップすると文字がコピーされますので、メッセージ入力欄にペーストして送信します。"
+                    android:text="1. 「重ねて表示」と「通知へのアクセス」を許可します。\n2. 「返信バブルを起動」を押すと画面端に『💬』バブルが出現します。\n3. LINEでメッセージ通知を受信した状態で『💬』をタップすると、通知メッセージを元に[返信提案][日程調整][話題提案][ムード分析]から最適な返信を生成します。\n4. 気に入った案をタップするとクリップボードにコピーされますので、入力欄に貼り付けて送信してください。\n※ 過去のメッセージに返信したい時は、LINEでそのメッセージを長押しコピーするとAIが自動で反映します。"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>

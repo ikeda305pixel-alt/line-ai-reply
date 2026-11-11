@@ -13,17 +13,21 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.antigravity.lineaireply.R
+import com.antigravity.lineaireply.ai.AssistantMode
 import com.antigravity.lineaireply.ai.SmartReplyOption
 
 /**
- * Floating Overlay Manager for MediaProjection AI Reply Assistant.
+ * Floating Overlay Manager for Notification-backed AI Reply Assistant.
  * Responsibilities:
  * - Floating trigger bubble (💬) draggable with automatic left/right edge snapping.
- * - Reply suggestions popup overlay with 3-4 clickable candidate cards.
- * - Tap-to-copy with user-friendly "📋 コピーしました。入力欄にペーストしてください" toast.
+ * - Multi-room switching chips (one-tap switch between recent chat rooms).
+ * - 4 Action Mode selector (返信提案 / 日程調整 / 話題提案 / ムード分析).
+ * - Priority clipboard context preview.
+ * - Reply suggestions popup overlay with tap-to-copy and toast notification.
  */
 class SmartOverlayManager(private val context: Context) {
 
@@ -98,23 +102,25 @@ class SmartOverlayManager(private val context: Context) {
         var touchDownY = 0f
         var isClick = false
 
-        bubbleIcon.setOnTouchListener { _, event ->
+        view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    view.alpha = 1.0f
                     initialX = params.x
                     initialY = params.y
                     touchDownX = event.rawX
                     touchDownY = event.rawY
                     isClick = true
+                    view.alpha = 1.0f
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (Math.abs(event.rawX - touchDownX) > 12 || Math.abs(event.rawY - touchDownY) > 12) {
+                    val dx = (event.rawX - touchDownX).toInt()
+                    val dy = (event.rawY - touchDownY).toInt()
+                    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
                         isClick = false
                     }
-                    params.x = initialX + (event.rawX - touchDownX).toInt()
-                    params.y = initialY + (event.rawY - touchDownY).toInt()
+                    params.x = initialX + dx
+                    params.y = initialY + dy
                     try {
                         windowManager.updateViewLayout(view, params)
                     } catch (e: Exception) {
@@ -153,14 +159,19 @@ class SmartOverlayManager(private val context: Context) {
     fun showReplies(
         platform: String = "LINE",
         summaryText: String,
+        currentRoom: String,
+        availableRooms: List<String>,
+        currentMode: AssistantMode = AssistantMode.REPLY,
         partnerMessage: String = "",
-        profilePreview: String = "",
+        clipboardText: String? = null,
         options: List<SmartReplyOption>,
+        onRoomSelected: (String) -> Unit,
+        onModeSelected: (AssistantMode) -> Unit,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
         onDismiss: (() -> Unit)? = null
     ) {
-        // Hide the floating trigger bubble while the reply modal is active
+        // Hide trigger bubble while modal is active
         hideBubble()
 
         if (cardView == null) {
@@ -182,7 +193,7 @@ class SmartOverlayManager(private val context: Context) {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                y = 100
+                y = 60
             }
 
             cardView = view
@@ -196,6 +207,7 @@ class SmartOverlayManager(private val context: Context) {
 
         val v = cardView ?: return
 
+        // 1. Platform tag & Context summary
         val tagView = v.findViewById<TextView>(R.id.textPlatformTag)
         if (platform == "Bumble") {
             tagView.text = "Bumble AI"
@@ -206,28 +218,87 @@ class SmartOverlayManager(private val context: Context) {
             tagView.setBackgroundColor(Color.parseColor("#06C755"))
             tagView.setTextColor(Color.WHITE)
         }
-
         v.findViewById<TextView>(R.id.textContextSummary).text = summaryText
 
-        v.findViewById<TextView>(R.id.textPartnerMessagePreview)?.let { preview ->
-            val sb = StringBuilder()
-            if (partnerMessage.isNotBlank()) {
-                val snippet = if (partnerMessage.length > 35) partnerMessage.take(35) + "…" else partnerMessage
-                sb.append("💬 文脈: 「$snippet」")
+        // 2. Room Switcher Chips
+        val layoutRooms = v.findViewById<LinearLayout>(R.id.layoutRoomChips)
+        layoutRooms?.removeAllViews()
+        val roomsToDisplay = if (availableRooms.isNotEmpty()) availableRooms else listOf(currentRoom)
+        for (room in roomsToDisplay) {
+            val isCurrent = (room == currentRoom)
+            val chip = TextView(context).apply {
+                text = if (isCurrent) "👤 $room (選択中)" else "👤 $room"
+                textSize = 11f
+                setPadding(20, 8, 20, 8)
+                val marginParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginEnd = 12
+                }
+                layoutParams = marginParams
+                if (isCurrent) {
+                    setTextColor(Color.WHITE)
+                    setBackgroundColor(Color.parseColor("#06C755"))
+                } else {
+                    setTextColor(Color.parseColor("#334155"))
+                    setBackgroundColor(Color.parseColor("#E2E8F0"))
+                }
+                setOnClickListener {
+                    if (!isCurrent) {
+                        onRoomSelected(room)
+                    }
+                }
             }
-            if (profilePreview.isNotBlank()) {
-                if (sb.isNotEmpty()) sb.append("\n")
-                val pSnippet = if (profilePreview.length > 40) profilePreview.take(40) + "…" else profilePreview
-                sb.append("📸 画面: $pSnippet")
-            }
-            if (sb.isNotEmpty()) {
-                preview.visibility = View.VISIBLE
-                preview.text = sb.toString()
+            layoutRooms?.addView(chip)
+        }
+
+        // 3. 4 Action Mode Buttons
+        fun updateModeButton(btn: Button, mode: AssistantMode) {
+            val isSelected = (mode == currentMode)
+            if (isSelected) {
+                btn.setBackgroundColor(Color.parseColor("#06C755"))
+                btn.setTextColor(Color.WHITE)
             } else {
-                preview.visibility = View.GONE
+                btn.setBackgroundColor(Color.TRANSPARENT)
+                btn.setTextColor(Color.parseColor("#475569"))
+            }
+            btn.setOnClickListener {
+                if (!isSelected) {
+                    onModeSelected(mode)
+                }
             }
         }
 
+        v.findViewById<Button>(R.id.btnModeReply)?.let { updateModeButton(it, AssistantMode.REPLY) }
+        v.findViewById<Button>(R.id.btnModeSchedule)?.let { updateModeButton(it, AssistantMode.SCHEDULE) }
+        v.findViewById<Button>(R.id.btnModeTopic)?.let { updateModeButton(it, AssistantMode.TOPIC) }
+        v.findViewById<Button>(R.id.btnModeMood)?.let { updateModeButton(it, AssistantMode.MOOD) }
+
+        // 4. Clipboard Priority Banner
+        v.findViewById<TextView>(R.id.textClipboardPreview)?.let { clipView ->
+            if (!clipboardText.isNullOrBlank()) {
+                clipView.visibility = View.VISIBLE
+                val snippet = if (clipboardText.length > 35) clipboardText.take(35) + "…" else clipboardText
+                clipView.text = "📋 クリップボード文を優先反映中: 「$snippet」"
+            } else {
+                clipView.visibility = View.GONE
+            }
+        }
+
+        // 5. Partner Message Preview
+        v.findViewById<TextView>(R.id.textPartnerMessagePreview)?.let { preview ->
+            if (partnerMessage.isNotBlank()) {
+                val snippet = if (partnerMessage.length > 50) partnerMessage.take(50) + "…" else partnerMessage
+                preview.text = "💬 [$currentRoom] 直近通知: 「$snippet」"
+                preview.visibility = View.VISIBLE
+            } else {
+                preview.text = "💬 [$currentRoom] （まだ新しい通知はありません）"
+                preview.visibility = View.VISIBLE
+            }
+        }
+
+        // 6. 4 Selectable Reply Options
         val btnList = listOf(
             v.findViewById<Button>(R.id.btnOpt1),
             v.findViewById<Button>(R.id.btnOpt2),
@@ -252,6 +323,7 @@ class SmartOverlayManager(private val context: Context) {
             }
         }
 
+        // 7. Close and Actions
         v.findViewById<View>(R.id.btnClose).setOnClickListener {
             hideReplies()
             onDismiss?.invoke()

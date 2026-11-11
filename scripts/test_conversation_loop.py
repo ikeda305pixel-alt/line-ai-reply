@@ -363,37 +363,41 @@ def test_ui_chat_confinement_and_anti_duplication():
 
 def test_paypay_and_financial_app_protection():
     import os
-    # 1. Verification of complete removal of AccessibilityService (PayPay & Bank app RASP defense)
+    # 1. Verification of complete removal of AccessibilityService and MediaProjection
     assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt"), \
         "LineAccessibilityService.kt MUST be completely deleted!"
     assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/PayPayTileService.kt"), \
         "PayPayTileService.kt MUST be completely deleted!"
     assert not os.path.exists("app/src/main/res/xml/accessibility_service_config.xml"), \
         "accessibility_service_config.xml MUST be completely deleted!"
+    assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/ScreenCaptureHelper.kt"), \
+        "ScreenCaptureHelper.kt MUST be completely deleted (MediaProjection removed)!"
 
-    # 2. Verify AndroidManifest.xml has zero AccessibilityService and registers MediaProjection service
+    # 2. Verify AndroidManifest.xml has zero AccessibilityService/MediaProjection and registers NotificationListenerService
     with open("app/src/main/AndroidManifest.xml") as f:
         manifest_xml = f.read()
 
     assert "AccessibilityService" not in manifest_xml, "Manifest must have ZERO AccessibilityService!"
     assert "BIND_ACCESSIBILITY_SERVICE" not in manifest_xml, "Manifest must not request BIND_ACCESSIBILITY_SERVICE!"
     assert "PayPayTileService" not in manifest_xml, "PayPayTileService must be removed from manifest!"
-    assert "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" in manifest_xml, \
-        "Manifest must declare FOREGROUND_SERVICE_MEDIA_PROJECTION!"
+    assert "FOREGROUND_SERVICE_MEDIA_PROJECTION" not in manifest_xml, \
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION MUST be removed from manifest to prevent red recording icon and screen blackout!"
     assert "android.permission.SYSTEM_ALERT_WINDOW" in manifest_xml, \
         "Manifest must declare SYSTEM_ALERT_WINDOW!"
     assert "FloatingBubbleService" in manifest_xml, \
         "Manifest must register FloatingBubbleService!"
-    assert 'foregroundServiceType="mediaProjection"' in manifest_xml, \
-        "FloatingBubbleService must have foregroundServiceType='mediaProjection'!"
+    assert "LineNotificationListenerService" in manifest_xml, \
+        "Manifest must register LineNotificationListenerService!"
+    assert "BIND_NOTIFICATION_LISTENER_SERVICE" in manifest_xml, \
+        "LineNotificationListenerService must require BIND_NOTIFICATION_LISTENER_SERVICE!"
 
-    # 3. Verify version 1.6.0 in build.gradle
+    # 3. Verify version 1.7.0 in build.gradle
     with open("app/build.gradle") as f:
         build_gradle = f.read()
-    assert 'versionName "1.6.0"' in build_gradle, "build.gradle MUST specify versionName 1.6.0!"
-    assert 'versionCode 23' in build_gradle, "build.gradle MUST specify versionCode 23!"
+    assert 'versionName "1.7.0"' in build_gradle, "build.gradle MUST specify versionName 1.7.0!"
+    assert 'versionCode 24' in build_gradle, "build.gradle MUST specify versionCode 24!"
 
-    print("PayPay & financial app 100% zero-interference & zero-AccessibilityService suite: PASS ✅")
+    print("PayPay, Banking app & Android 15 zero-interference suite: PASS ✅")
 
 def test_polite_tone_detection_and_matching():
     # v1.5.6 regex: no trailing anchor, handles emojis and kanji/hiragana+ます
@@ -544,43 +548,56 @@ def test_bubble_dismiss_and_keyboard_hiding():
         service_code = f.read()
     assert "ACTION_START" in service_code, "FloatingBubbleService must define ACTION_START!"
     assert "ACTION_STOP" in service_code, "FloatingBubbleService must define ACTION_STOP!"
-    assert "FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION" in service_code, "FloatingBubbleService must use mediaProjection foreground type!"
+    assert "MediaProjection" not in service_code, "FloatingBubbleService must have ZERO MediaProjection references!"
     assert "overlayManager.showBubble" in service_code, "FloatingBubbleService must show overlay bubble!"
 
     with open("app/src/main/java/com/antigravity/lineaireply/service/SmartOverlayManager.kt") as f:
         overlay_code = f.read()
     assert "snapToEdge" in overlay_code, "SmartOverlayManager must support edge snapping!"
     assert "copyToClipboard" in overlay_code, "SmartOverlayManager must copy selected text to clipboard!"
+    assert "AssistantMode" in overlay_code, "SmartOverlayManager must support AssistantMode switching!"
 
     print("Bubble manual dismiss, edge snap & FloatingBubbleService suite: PASS ✅")
 
-def test_mediaprojection_and_screen_capture():
-    # 1. ScreenCaptureHelper verification
-    with open("app/src/main/java/com/antigravity/lineaireply/service/ScreenCaptureHelper.kt") as f:
-        capture_code = f.read()
-    assert "captureScreenshot" in capture_code, "ScreenCaptureHelper must provide captureScreenshot!"
-    assert "bitmapToBase64Jpeg" in capture_code, "ScreenCaptureHelper must provide bitmapToBase64Jpeg!"
-    assert "rowPadding" in capture_code, "ScreenCaptureHelper must handle rowPadding byte alignment to prevent skewed bitmaps!"
+def test_notification_cache_and_assistant_modes():
+    # 1. NotificationChatCacheManager verification
+    with open("app/src/main/java/com/antigravity/lineaireply/service/NotificationChatCacheManager.kt") as f:
+        cache_code = f.read()
+    assert "addMessage" in cache_code, "NotificationChatCacheManager must provide addMessage!"
+    assert "getMessagesForRoom" in cache_code, "NotificationChatCacheManager must provide getMessagesForRoom!"
+    assert "getRecentRooms" in cache_code, "NotificationChatCacheManager must provide getRecentRooms!"
+    assert "getMostRecentRoom" in cache_code, "NotificationChatCacheManager must provide getMostRecentRoom!"
+    assert "isPhoto" in cache_code, "CachedMessage must support isPhoto detection!"
 
-    # 2. DynamicModelRouterPlugin multimodal inline_data support
-    with open("app/src/main/java/com/antigravity/lineaireply/plugin/DynamicModelRouterPlugin.kt") as f:
-        router_code = f.read()
-    assert "inline_data" in router_code, "DynamicModelRouterPlugin must support inline_data for multimodal Vision input!"
-    assert "image/jpeg" in router_code, "DynamicModelRouterPlugin must set mime_type image/jpeg!"
+    # 2. LineNotificationListenerService verification
+    with open("app/src/main/java/com/antigravity/lineaireply/service/LineNotificationListenerService.kt") as f:
+        listener_code = f.read()
+    assert "NotificationListenerService" in listener_code, "LineNotificationListenerService must extend NotificationListenerService!"
+    assert "jp.naver.line.android" in listener_code, "LineNotificationListenerService must listen to LINE notifications!"
+    assert "com.bumble.app" in listener_code, "LineNotificationListenerService must listen to Bumble notifications!"
+    assert "isNotificationAccessGranted" in listener_code, "LineNotificationListenerService must check notification access!"
+    assert "NotificationChatCacheManager.addMessage" in listener_code, "Listener must cache incoming notifications!"
 
-    # 3. SmartChatAssistant screenshot analysis
+    # 3. SmartChatAssistant 4 Action Modes & notification context analysis
     with open("app/src/main/java/com/antigravity/lineaireply/ai/SmartChatAssistant.kt") as f:
         assistant_code = f.read()
-    assert "generateRepliesFromScreenshot" in assistant_code, "SmartChatAssistant must provide generateRepliesFromScreenshot!"
-    assert "Gemini Vision" in assistant_code, "SmartChatAssistant must integrate with Gemini Vision!"
+    assert "enum class AssistantMode" in assistant_code, "SmartChatAssistant must define AssistantMode!"
+    assert "REPLY" in assistant_code and "SCHEDULE" in assistant_code and "TOPIC" in assistant_code and "MOOD" in assistant_code, \
+        "AssistantMode must have REPLY, SCHEDULE, TOPIC, and MOOD!"
+    assert "generateRepliesFromNotificationContext" in assistant_code, \
+        "SmartChatAssistant must provide generateRepliesFromNotificationContext!"
+    assert "厚木" in assistant_code and "茅ヶ崎" in assistant_code and "海老名" in assistant_code and "横浜" in assistant_code, \
+        "Schedule mode must enforce Kanagawa locations!"
 
-    # 4. MainActivity MediaProjection flow
+    # 4. MainActivity Notification Access & Overlay flow (Zero MediaProjection)
     with open("app/src/main/java/com/antigravity/lineaireply/MainActivity.kt") as f:
         main_code = f.read()
-    assert "createScreenCaptureIntent" in main_code, "MainActivity must call createScreenCaptureIntent!"
-    assert "FloatingBubbleService.ACTION_START" in main_code, "MainActivity must launch FloatingBubbleService with ACTION_START!"
+    assert "createScreenCaptureIntent" not in main_code, "MainActivity must have ZERO MediaProjection / screen capture code!"
+    assert "btnOpenNotificationAccess" in main_code, "MainActivity must wire btnOpenNotificationAccess!"
+    assert "btnOpenOverlay" in main_code, "MainActivity must wire btnOpenOverlay!"
+    assert "FloatingBubbleService.ACTION_START" in main_code, "MainActivity must launch FloatingBubbleService!"
 
-    print("MediaProjection screen capture & Gemini Vision suite: PASS ✅")
+    print("Notification cache & 4 Assistant Modes suite: PASS ✅")
 
 def test_bumble_system_filter_and_profile_extraction():
     bumble_sys_regex = r"(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)"
@@ -630,8 +647,8 @@ def main():
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    test_mediaprojection_and_screen_capture()
-    print("All loop engineering v1.6.0 tests: 100% PASSED! 🚀")
+    test_notification_cache_and_assistant_modes()
+    print("All loop engineering v1.7.0 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()
