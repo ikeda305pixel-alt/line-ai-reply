@@ -1,22 +1,35 @@
 package com.antigravity.lineaireply.service
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import com.antigravity.lineaireply.R
 import com.antigravity.lineaireply.ai.SmartReplyOption
 
+/**
+ * Floating Overlay Manager for MediaProjection AI Reply Assistant.
+ * Responsibilities:
+ * - Floating trigger bubble (💬) draggable with automatic left/right edge snapping.
+ * - Reply suggestions popup overlay with 3-4 clickable candidate cards.
+ * - Tap-to-copy with user-friendly "📋 コピーしました。入力欄にペーストしてください" toast.
+ */
 class SmartOverlayManager(private val context: Context) {
+
+    companion object {
+        private const val TAG = "SmartOverlayManager"
+    }
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
@@ -27,7 +40,14 @@ class SmartOverlayManager(private val context: Context) {
     // Reply Options Card
     private var cardView: View? = null
 
-    fun showBubble(platform: String, onClick: () -> Unit, onClose: (() -> Unit)? = null) {
+    fun isBubbleShowing(): Boolean = bubbleView != null
+    fun isRepliesShowing(): Boolean = cardView != null
+
+    fun showBubble(
+        platform: String = "LINE",
+        onClick: () -> Unit,
+        onClose: (() -> Unit)? = null
+    ) {
         if (bubbleView != null) return
 
         val inflater = LayoutInflater.from(context)
@@ -40,6 +60,10 @@ class SmartOverlayManager(private val context: Context) {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        val displayMetrics = context.resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -47,18 +71,20 @@ class SmartOverlayManager(private val context: Context) {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = 24
-            y = 100
+            gravity = Gravity.TOP or Gravity.START
+            x = screenWidth - 140
+            y = screenHeight / 3
         }
 
         bubbleParams = params
         bubbleView = view
-        view.alpha = 0.82f
+        view.alpha = 0.85f
 
         val bubbleIcon = view.findViewById<TextView>(R.id.bubbleIcon)
         if (platform == "Bumble") {
             bubbleIcon.setBackgroundColor(Color.parseColor("#FFC629"))
+        } else {
+            bubbleIcon.setBackgroundColor(Color.parseColor("#06C755"))
         }
 
         view.findViewById<View>(R.id.btnBubbleClose)?.setOnClickListener {
@@ -84,18 +110,21 @@ class SmartOverlayManager(private val context: Context) {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (Math.abs(event.rawX - touchDownX) > 10 || Math.abs(event.rawY - touchDownY) > 10) {
+                    if (Math.abs(event.rawX - touchDownX) > 12 || Math.abs(event.rawY - touchDownY) > 12) {
                         isClick = false
                     }
-                    params.x = initialX - (event.rawX - touchDownX).toInt()
+                    params.x = initialX + (event.rawX - touchDownX).toInt()
                     params.y = initialY + (event.rawY - touchDownY).toInt()
                     try {
                         windowManager.updateViewLayout(view, params)
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Update bubble layout error: ${e.message}")
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    view.alpha = 0.82f
+                    view.alpha = 0.85f
+                    snapToEdge(view, params)
                     if (isClick) {
                         onClick()
                     }
@@ -107,7 +136,9 @@ class SmartOverlayManager(private val context: Context) {
 
         try {
             windowManager.addView(view, params)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding bubble to WindowManager: ${e.message}")
+        }
     }
 
     fun hideBubble() {
@@ -119,20 +150,17 @@ class SmartOverlayManager(private val context: Context) {
         }
     }
 
-    fun isRepliesShowing(): Boolean = cardView != null
-
     fun showReplies(
-        platform: String,
+        platform: String = "LINE",
         summaryText: String,
         partnerMessage: String = "",
         profilePreview: String = "",
         options: List<SmartReplyOption>,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
-        onDirectType: () -> Unit,
         onDismiss: (() -> Unit)? = null
     ) {
-        // Hide the floating trigger bubble while the reply modal is active to prevent duplicate UI
+        // Hide the floating trigger bubble while the reply modal is active
         hideBubble()
 
         if (cardView == null) {
@@ -154,13 +182,14 @@ class SmartOverlayManager(private val context: Context) {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                y = 120
+                y = 100
             }
 
             cardView = view
             try {
                 windowManager.addView(view, params)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed adding replies card: ${e.message}")
                 return
             }
         }
@@ -184,12 +213,12 @@ class SmartOverlayManager(private val context: Context) {
             val sb = StringBuilder()
             if (partnerMessage.isNotBlank()) {
                 val snippet = if (partnerMessage.length > 35) partnerMessage.take(35) + "…" else partnerMessage
-                sb.append("💬 相手（左）への回答: 「$snippet」")
+                sb.append("💬 文脈: 「$snippet」")
             }
             if (profilePreview.isNotBlank()) {
                 if (sb.isNotEmpty()) sb.append("\n")
                 val pSnippet = if (profilePreview.length > 40) profilePreview.take(40) + "…" else profilePreview
-                sb.append("👤 プロフ: $pSnippet")
+                sb.append("📸 画面: $pSnippet")
             }
             if (sb.isNotEmpty()) {
                 preview.visibility = View.VISIBLE
@@ -213,6 +242,7 @@ class SmartOverlayManager(private val context: Context) {
                 btn.visibility = View.VISIBLE
                 btn.text = "${opt.label}\n${opt.text}"
                 btn.setOnClickListener {
+                    copyToClipboard(opt.text)
                     hideReplies()
                     onSelect(opt.text)
                     onDismiss?.invoke()
@@ -229,7 +259,6 @@ class SmartOverlayManager(private val context: Context) {
 
         v.findViewById<View>(R.id.btnDirectType).setOnClickListener {
             hideReplies()
-            onDirectType()
             onDismiss?.invoke()
         }
 
@@ -247,24 +276,27 @@ class SmartOverlayManager(private val context: Context) {
         }
     }
 
-    fun insertTextIntoInput(inputNode: AccessibilityNodeInfo?, text: String): Boolean {
-        try {
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            val clip = android.content.ClipData.newPlainText("AI Reply", text)
-            clipboard.setPrimaryClip(clip)
-        } catch (_: Exception) {}
-
-        if (inputNode != null) {
-            val args = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            val ok = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-            android.widget.Toast.makeText(context, "入力欄にセットしました（コピー済み）", android.widget.Toast.LENGTH_SHORT).show()
-            return ok
+    fun snapToEdge(view: View, params: WindowManager.LayoutParams) {
+        val screenWidth = context.resources.displayMetrics.widthPixels
+        val currentWidth = view.width.coerceAtLeast(120)
+        if (params.x + currentWidth / 2 < screenWidth / 2) {
+            params.x = 24
         } else {
-            android.widget.Toast.makeText(context, "返信文をコピーしました！入力欄を長押しして貼り付けてください📋", android.widget.Toast.LENGTH_LONG).show()
-            return false
+            params.x = screenWidth - currentWidth - 24
+        }
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {}
+    }
+
+    fun copyToClipboard(text: String) {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("LINE AI Reply", text)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "📋 コピーしました。入力欄にペーストしてください", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.w(TAG, "Clipboard copy error: ${e.message}")
         }
     }
 

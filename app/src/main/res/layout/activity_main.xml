@@ -11,6 +11,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,7 +36,7 @@
                 android:paddingTop="4dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="4dp"
-                android:text="v1.4.0 (最新)"
+                android:text="v1.6.0"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -45,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="LINEトーク履歴からAI返信案を無料自動作成（タップで入力）"
+            android:text="画面キャプチャ＆Gemini Visionによる高精度AI返信アシスタント"
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
@@ -59,7 +60,42 @@
             android:textColor="@color/line_green_dark"
             android:textSize="12sp" />
 
-        <!-- Permissions Card -->
+        <!-- Security & Bank/PayPay Safety Banner -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="1dp"
+            app:strokeColor="#A7F3D0"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#ECFDF5"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🛡️ PayPay・銀行アプリ完全両立対応"
+                    android:textColor="#065F46"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="AccessibilityService（ユーザー補助）を100%撤廃しました。PayPayや金融機関アプリのセキュリティ警告・利用制限に一切抵触せず、常にそのままご利用いただけます。"
+                    android:textColor="#047857"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Bubble Control & Permissions Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -78,115 +114,57 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="初期権限設定 (初回のみON)"
+                    android:text="返信アシストバブル設定"
                     android:textColor="@color/text_primary"
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
-                <Button
-                    android:id="@+id/btnOpenAccessibility"
+                <TextView
+                    android:id="@+id/tvBubbleStatus"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:backgroundTint="@color/line_green"
-                    android:text="@string/btn_open_accessibility" />
+                    android:layout_marginTop="6dp"
+                    android:background="#F3F4F6"
+                    android:padding="8dp"
+                    android:text="稼働状態: 停止中 ⚪"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <Button
                     android:id="@+id/btnOpenOverlay"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
+                    android:layout_marginTop="10dp"
                     android:text="@string/btn_open_overlay" />
 
-                <!-- Floating Bubble ON/OFF Switch -->
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchFloatingBubble"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:checked="true"
-                    android:text="トーク画面でのバブル（💬）表示"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="※OFFにすると画面端にアイコンを一切出さず完全に非表示にします。バブル上の『✕』ボタンでもワンタップで消去できます。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
-
-                <TextView
+                <Button
+                    android:id="@+id/btnStartBubble"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="#FEF3C7"
-                    android:padding="8dp"
-                    android:text="💡 画面端にAndroidの『人型マーク 👤』やショートカットボタンが常駐して邪魔な場合：\n端末の『設定』→『ユーザー補助』→『LINE AI Reply』を開き、『ショートカット』をOFFにしてください。"
-                    android:textColor="#92400E"
-                    android:textSize="11sp" />
+                    android:backgroundTint="@color/line_green"
+                    android:text="@string/btn_start_bubble" />
 
                 <Button
-                    android:id="@+id/btnTestBubble"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:id="@+id/btnStopBubble"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="💬 トーク画面での表示動作について確認"
-                    android:textColor="@color/line_green_dark" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- PayPay & Payment Apps Protection Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="2dp"
-            app:strokeColor="#FEE2E2"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="💳 PayPay / 決済アプリ連携"
+                    android:strokeColor="#EF4444"
                     android:textColor="#DC2626"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:text="@string/btn_stop_bubble" />
 
                 <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="PayPay起動時にセキュリティ検知でブロックされないよう、自動一時停止＆1タップ再開通知を提供します。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/btnLaunchPayPayMode"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:backgroundTint="#EF4444"
-                    android:text="💳 PayPayモード起動（AI返信一時停止）" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:background="#FEF2F2"
-                    android:padding="8dp"
-                    android:text="💡 クイック設定タイル対応！\n画面上部の通知バーを引き下げて『PayPay決済 (AI停止)』タイルを追加すると、レジ前でワンタップでAI返信を停止してPayPayを即起動できます。お支払い後は通知をタップして1秒で再開できます。"
-                    android:textColor="#991B1B"
+                    android:background="#FEF3C7"
+                    android:padding="10dp"
+                    android:text="💡 使い方：\n① [バブル起動] をタップして画面キャプチャを許可すると、画面端に『💬』バブルが出現します（ドラッグで移動可能）。\n② LINE等のトーク画面で『💬』をタップすると、画面内容をGeminiが瞬時に解析し、文脈に合った3パターンの返信案を表示します。\n③ 返信案をタップするとクリップボードにコピーされますので、LINEの入力欄に貼り付けて送信してください。\n※ 画面上部の通知バーからもいつでもバブルの停止・再開が可能です。"
+                    android:textColor="#92400E"
                     android:textSize="11sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -357,7 +335,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="3dp"
-                    android:text="1. LINEで友だちとのトークを開きます。\n2. 画面の右端に出る「💬 返信案」ボタンを押すか、相手のメッセージをタップします。\n3. 会話の流れを踏まえた4つの返信案が出るので、好きなものを1つタップ。\n4. 入力欄に文字が入るので、確認して送信ボタンを押すだけです！\n※ 直に書きたい時は「✍️ 直に入力」を押せばサッと消えます。"
+                    android:text="1. 上記の「バブル起動」ボタンを押し、画面キャプチャを許可します。\n2. LINEまたはBumbleを開き、相手とのトーク画面を表示します。\n3. 画面端の「💬」バブルをタップします。\n4. Gemini Visionが画面を直接見て、相手のメッセージ、敬語・タメ口のトーン、写真の内容、相手のプロフィール文脈を把握して3パターンの返信案を提示します。\n5. 好きな返信案をタップすると文字がコピーされますので、メッセージ入力欄にペーストして送信します。"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>

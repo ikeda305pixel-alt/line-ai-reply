@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.7.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.6.0.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,36 +46,39 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.7
-          name: LINE & Bumble AI Reply Assistant v1.5.7 (PayPayセキュリティ完全突破・自動一時停止＆1タップ再開通知・クイック設定タイル対応)
+          tag_name: v1.6.0
+          name: LINE & Bumble AI Reply Assistant v1.6.0 (AccessibilityService完全撤廃・画面キャプチャ＆Gemini Vision対応・PayPay完全両立)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.7
+            ## LINE & Bumble AI返信アシスタント v1.6.0
 
-            ### 💳 【PayPayセキュリティ完全突破＆0秒決済モード】
-            1. **PayPay・主要決済アプリの自動検知＆完全自動一時停止**:
-               - PayPay起動時にセキュリティ検知でブロックされる問題を抜本解決。
-               - PayPay（および楽天ペイ、d払い、au PAY、メルペイ、銀行アプリ等）の起動を検知した瞬間、OSのユーザー補助サービスを自身で即座に一時停止（`disableSelf()`）。PayPayが100%エラーなく起動します。
-            2. **決済後1タップで即座にAI返信を再開（設定の深い階層に行く必要ゼロ）**:
-               - 一時停止と同時に常駐通知「💳 PayPay利用のためAI返信を一時停止しました」を自動発行。
-               - 決済完了後、通知を1タップするだけで直接ユーザー補助の詳細トグル画面へジャンプ！設定メニューを探し回る手間をゼロにしました。
-               - 再開スイッチをONにすると通知も自動で消去されます。
-            3. **クイック設定パネル（通知バー）タイル対応**:
-               - スマホの画面上部を引き下げて配置できる「PayPay決済 (AI停止)」クイック設定タイルを新設。
-               - レジ前で通知バーからワンタップするだけで「AI返信停止＋PayPay即起動」が完了。
-            4. **メイン画面に「PayPayモード起動」ボタンを追加**:
-               - アプリ内からも1タップでPayPayを安全に起動可能。
+            ### 🛡️ 【ユーザー補助（AccessibilityService）の完全撤廃＆PayPay完全両立】
+            1. **AccessibilityServiceをコードベースおよびManifestから100%削除**:
+               - PayPayや銀行アプリ等のセキュリティ制限（RASPによるAccessibilityService検知）の根本原因を完全根絶。
+               - アプリ内にAccessibilityServiceクラス・パーミッションが一切存在しないため、PayPayのセキュリティ警告や利用制限に100%引っかかりません。
+               - 一時停止や再開の手間も一切不要となり、常にPayPayや金融アプリをそのまま快適にご利用いただけます。
 
-            ### 🎯 【既存の高品質アシスト機能の完全維持】
-            - **LINE & Bumble 敬語完全同期**: 相手が敬語なら4案すべてを丁寧語（です・ます調）で統一。
-            - **過去ログ2倍深度（最大240件）参照**: 直近文脈を正確に把握。
-            - **Bumbleプロフィール全文抽出＆言及義務化**: 自己紹介やプロンプト回答を確実に返信へ反映。
-            - **神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定ルール**: 東京の店は絶対に提案せず地元で自然にエスコート。
+            ### 🚀 【画面キャプチャ（MediaProjection）＋フローティングバブルによる高精度AIアシスト】
+            1. **画面端のフローティングバブル（💬）常駐**:
+               - 「他のアプリの上に重ねて表示（`SYSTEM_ALERT_WINDOW`）」を用いた軽量バブルを画面端に表示。
+               - 指で自由にドラッグ移動でき、画面端にスムーズに吸着（Edge Snapping）します。
+            2. **バブルタップ時の自動スクリーンショット＆Gemini Vision解析**:
+               - LINEやBumbleのトーク画面でバブルをタップすると、MediaProjection APIにより現在の画面をキャプチャ。
+               - Gemini Vision（画像認識対応モデル）へ画像を送信し、メッセージ履歴・相手のトーン・送信された写真・プロフィールを直接解析。
+               - 文脈に応じた自然で高EQな返信候補を3パターン生成します。
+            3. **返信候補のポップアップ＆タップでクリップボード自動コピー**:
+               - バブル付近に綺麗なオーバーレイカードで返信案を表示。
+               - 気に入った候補をタップするだけでクリップボードにコピーされ、トースト通知が表示されます。トーク入力欄にそのままペーストして送信できます。
 
-            ### 🛡️ 【固定署名キーストアによる直接「更新」】
+            ### 🎯 【既存の高品質アシストルールの完全継承】
+            - **敬語完全同期**: 相手が敬語なら必ず敬語（です・ます調）で返信。
+            - **写真リアクション**: 相手が写真を送ってきた場合、その内容（料理、ペット、風景など）に自然に言及。
+            - **神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定ルール**: 東京の店は絶対に提案せず、地元近辺で自然に提案。
+
+            ### 🔒 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.7.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.6.0.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

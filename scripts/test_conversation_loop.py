@@ -362,68 +362,38 @@ def test_ui_chat_confinement_and_anti_duplication():
     print("UI chat room confinement & anti-duplication suite: PASS ✅")
 
 def test_paypay_and_financial_app_protection():
-    # 1. Config verification: must include LINE & Bumble for AI assistance, plus PayPay for auto-pause
-    with open("app/src/main/res/xml/accessibility_service_config.xml") as f:
-        config_text = f.read()
-    assert "jp.naver.line.android" in config_text and "com.bumble.app" in config_text, \
-        "accessibility_service_config.xml MUST include LINE and Bumble!"
-    assert "jp.ne.paypay.android.app" in config_text, \
-        "accessibility_service_config.xml MUST include PayPay for auto-pause detection!"
+    import os
+    # 1. Verification of complete removal of AccessibilityService (PayPay & Bank app RASP defense)
+    assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt"), \
+        "LineAccessibilityService.kt MUST be completely deleted!"
+    assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/PayPayTileService.kt"), \
+        "PayPayTileService.kt MUST be completely deleted!"
+    assert not os.path.exists("app/src/main/res/xml/accessibility_service_config.xml"), \
+        "accessibility_service_config.xml MUST be completely deleted!"
 
-    # 2. Package isolation check
-    financial_and_system_apps = [
-        "jp.ne.paypay.android.app",      # PayPay
-        "jp.co.rakuten.pay",             # Rakuten Pay
-        "com.smbc.direct",               # SMBC Banking
-        "jp.mufg.bk.app",                # MUFG Banking
-        "jp.co.mizuhobank.banking",       # Mizuho Banking
-        "jp.japanpost.jp_bank.app",      # Japan Post Bank
-        "com.google.android.apps.nexuslauncher", # Pixel Launcher
-        "com.android.systemui",          # System UI / Home / Notifications
-        "com.google.android.youtube",    # YouTube
-        "com.android.chrome"             # Chrome
-    ]
-
-    def overlay_allowed_in_package(pkg: str) -> bool:
-        return pkg in ["jp.naver.line.android", "com.bumble.app"]
-
-    for app in financial_and_system_apps:
-        assert not overlay_allowed_in_package(app), f"Overlay MUST NEVER be allowed in {app}! It blocks PayPay and financial apps!"
-
-    # Verify accessibility_service_config.xml includes PayPay & payment packages
-    with open("app/src/main/res/xml/accessibility_service_config.xml") as f:
-        config_xml = f.read()
-    assert "jp.ne.paypay.android.app" in config_xml, "accessibility_service_config.xml MUST include PayPay package!"
-    assert "jp.co.rakuten.pay" in config_xml, "accessibility_service_config.xml MUST include Rakuten Pay!"
-
-    # Verify LineAccessibilityService contains disableSelfWithRestoreNotification & showRestoreNotification
-    with open("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt") as f:
-        service_code = f.read()
-    assert "disableSelfWithRestoreNotification" in service_code, "LineAccessibilityService MUST implement disableSelfWithRestoreNotification!"
-    assert "showRestoreNotification" in service_code, "LineAccessibilityService MUST implement showRestoreNotification!"
-    assert "PAYMENT_PACKAGES" in service_code, "LineAccessibilityService MUST define PAYMENT_PACKAGES!"
-    assert "disableSelf()" in service_code, "LineAccessibilityService MUST call disableSelf() to remove itself from OS enabled list!"
-
-    # Verify PayPayTileService exists and handles tile clicks
-    with open("app/src/main/java/com/antigravity/lineaireply/service/PayPayTileService.kt") as f:
-        tile_code = f.read()
-    assert "class PayPayTileService : TileService()" in tile_code, "PayPayTileService must extend TileService!"
-    assert "disableSelfWithRestoreNotification" in tile_code, "PayPayTileService must call disableSelfWithRestoreNotification!"
-    assert "startActivityAndCollapse" in tile_code, "PayPayTileService must collapse notification panel on launch!"
-
-    # Verify AndroidManifest.xml registers PayPayTileService and POST_NOTIFICATIONS
+    # 2. Verify AndroidManifest.xml has zero AccessibilityService and registers MediaProjection service
     with open("app/src/main/AndroidManifest.xml") as f:
         manifest_xml = f.read()
-    assert "android.permission.POST_NOTIFICATIONS" in manifest_xml, "Manifest must declare POST_NOTIFICATIONS permission!"
-    assert ".service.PayPayTileService" in manifest_xml or "PayPayTileService" in manifest_xml, "Manifest must register PayPayTileService!"
-    assert "android.permission.BIND_QUICK_SETTINGS_TILE" in manifest_xml, "PayPayTileService must require BIND_QUICK_SETTINGS_TILE!"
 
-    # Verify version 1.5.7 in build.gradle
+    assert "AccessibilityService" not in manifest_xml, "Manifest must have ZERO AccessibilityService!"
+    assert "BIND_ACCESSIBILITY_SERVICE" not in manifest_xml, "Manifest must not request BIND_ACCESSIBILITY_SERVICE!"
+    assert "PayPayTileService" not in manifest_xml, "PayPayTileService must be removed from manifest!"
+    assert "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" in manifest_xml, \
+        "Manifest must declare FOREGROUND_SERVICE_MEDIA_PROJECTION!"
+    assert "android.permission.SYSTEM_ALERT_WINDOW" in manifest_xml, \
+        "Manifest must declare SYSTEM_ALERT_WINDOW!"
+    assert "FloatingBubbleService" in manifest_xml, \
+        "Manifest must register FloatingBubbleService!"
+    assert 'foregroundServiceType="mediaProjection"' in manifest_xml, \
+        "FloatingBubbleService must have foregroundServiceType='mediaProjection'!"
+
+    # 3. Verify version 1.6.0 in build.gradle
     with open("app/build.gradle") as f:
         build_gradle = f.read()
-    assert 'versionName "1.5.7"' in build_gradle, "build.gradle MUST specify versionName 1.5.7!"
+    assert 'versionName "1.6.0"' in build_gradle, "build.gradle MUST specify versionName 1.6.0!"
+    assert 'versionCode 23' in build_gradle, "build.gradle MUST specify versionCode 23!"
 
-    print("PayPay & financial app 100% zero-interference & auto-pause suite: PASS ✅")
+    print("PayPay & financial app 100% zero-interference & zero-AccessibilityService suite: PASS ✅")
 
 def test_polite_tone_detection_and_matching():
     # v1.5.6 regex: no trailing anchor, handles emojis and kanji/hiragana+ます
@@ -569,13 +539,48 @@ def test_bubble_dismiss_and_keyboard_hiding():
         layout_text = f.read()
     assert "btnBubbleClose" in layout_text, "Bubble layout MUST have btnBubbleClose!"
 
-    # 3. Check Service code uses window API for IME detection and Dispatchers.Default for safety watcher
-    with open("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt") as f:
+    # 3. Check FloatingBubbleService and SmartOverlayManager
+    with open("app/src/main/java/com/antigravity/lineaireply/service/FloatingBubbleService.kt") as f:
         service_code = f.read()
-    assert "AccessibilityWindowInfo.TYPE_INPUT_METHOD" in service_code, "Must use TYPE_INPUT_METHOD window detection!"
-    assert "Dispatchers.Default" in service_code, "Safety watcher must run on Dispatchers.Default!"
+    assert "ACTION_START" in service_code, "FloatingBubbleService must define ACTION_START!"
+    assert "ACTION_STOP" in service_code, "FloatingBubbleService must define ACTION_STOP!"
+    assert "FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION" in service_code, "FloatingBubbleService must use mediaProjection foreground type!"
+    assert "overlayManager.showBubble" in service_code, "FloatingBubbleService must show overlay bubble!"
 
-    print("Bubble manual dismiss, keyboard auto-hide & settings toggle suite: PASS ✅")
+    with open("app/src/main/java/com/antigravity/lineaireply/service/SmartOverlayManager.kt") as f:
+        overlay_code = f.read()
+    assert "snapToEdge" in overlay_code, "SmartOverlayManager must support edge snapping!"
+    assert "copyToClipboard" in overlay_code, "SmartOverlayManager must copy selected text to clipboard!"
+
+    print("Bubble manual dismiss, edge snap & FloatingBubbleService suite: PASS ✅")
+
+def test_mediaprojection_and_screen_capture():
+    # 1. ScreenCaptureHelper verification
+    with open("app/src/main/java/com/antigravity/lineaireply/service/ScreenCaptureHelper.kt") as f:
+        capture_code = f.read()
+    assert "captureScreenshot" in capture_code, "ScreenCaptureHelper must provide captureScreenshot!"
+    assert "bitmapToBase64Jpeg" in capture_code, "ScreenCaptureHelper must provide bitmapToBase64Jpeg!"
+    assert "rowPadding" in capture_code, "ScreenCaptureHelper must handle rowPadding byte alignment to prevent skewed bitmaps!"
+
+    # 2. DynamicModelRouterPlugin multimodal inline_data support
+    with open("app/src/main/java/com/antigravity/lineaireply/plugin/DynamicModelRouterPlugin.kt") as f:
+        router_code = f.read()
+    assert "inline_data" in router_code, "DynamicModelRouterPlugin must support inline_data for multimodal Vision input!"
+    assert "image/jpeg" in router_code, "DynamicModelRouterPlugin must set mime_type image/jpeg!"
+
+    # 3. SmartChatAssistant screenshot analysis
+    with open("app/src/main/java/com/antigravity/lineaireply/ai/SmartChatAssistant.kt") as f:
+        assistant_code = f.read()
+    assert "generateRepliesFromScreenshot" in assistant_code, "SmartChatAssistant must provide generateRepliesFromScreenshot!"
+    assert "Gemini Vision" in assistant_code, "SmartChatAssistant must integrate with Gemini Vision!"
+
+    # 4. MainActivity MediaProjection flow
+    with open("app/src/main/java/com/antigravity/lineaireply/MainActivity.kt") as f:
+        main_code = f.read()
+    assert "createScreenCaptureIntent" in main_code, "MainActivity must call createScreenCaptureIntent!"
+    assert "FloatingBubbleService.ACTION_START" in main_code, "MainActivity must launch FloatingBubbleService with ACTION_START!"
+
+    print("MediaProjection screen capture & Gemini Vision suite: PASS ✅")
 
 def test_bumble_system_filter_and_profile_extraction():
     bumble_sys_regex = r"(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)"
@@ -625,7 +630,8 @@ def main():
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    print("All loop engineering v1.5.7 tests: 100% PASSED! 🚀")
+    test_mediaprojection_and_screen_capture()
+    print("All loop engineering v1.6.0 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

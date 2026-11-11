@@ -15,7 +15,8 @@ interface IDynamicModelRouterPlugin {
     suspend fun generateContent(
         apiKey: String,
         prompt: String,
-        preferredModel: String? = null
+        preferredModel: String? = null,
+        imageBase64: String? = null
     ): ModelResult
     suspend fun testApiKey(apiKey: String): Pair<Boolean, String>
 }

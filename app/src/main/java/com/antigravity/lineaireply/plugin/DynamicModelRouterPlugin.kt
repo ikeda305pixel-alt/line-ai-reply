@@ -121,7 +121,8 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
     override suspend fun generateContent(
         apiKey: String,
         prompt: String,
-        preferredModel: String?
+        preferredModel: String?,
+        imageBase64: String?
     ): ModelResult = withContext(Dispatchers.IO) {
         val cleanKey = sanitizeKey(apiKey)
         if (cleanKey.isBlank()) {
@@ -148,7 +149,17 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
             try {
                 val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
                 val body = JSONObject().apply {
-                    val parts = JSONArray().put(JSONObject().put("text", prompt))
+                    val parts = JSONArray().apply {
+                        if (!imageBase64.isNullOrBlank()) {
+                            put(JSONObject().apply {
+                                put("inline_data", JSONObject().apply {
+                                    put("mime_type", "image/jpeg")
+                                    put("data", imageBase64)
+                                })
+                            })
+                        }
+                        put(JSONObject().put("text", prompt))
+                    }
                     put("contents", JSONArray().put(JSONObject().put("parts", parts)))
                     put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
                 }

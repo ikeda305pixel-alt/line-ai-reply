@@ -1,15 +1,13 @@
 package com.antigravity.lineaireply
 
-import android.accessibilityservice.AccessibilityService
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -21,8 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import com.antigravity.lineaireply.ai.ConversationMemoryManager
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.SmartChatAssistant
-import com.antigravity.lineaireply.service.LineAccessibilityService
-import com.antigravity.lineaireply.service.SmartOverlayManager
+import com.antigravity.lineaireply.service.FloatingBubbleService
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -32,6 +29,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var guard: FreeTierGuard
     private lateinit var memoryManager: ConversationMemoryManager
+    private lateinit var mediaProjectionManager: MediaProjectionManager
+
+    private val screenCaptureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            val serviceIntent = Intent(this, FloatingBubbleService::class.java).apply {
+                action = FloatingBubbleService.ACTION_START
+                putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, result.resultCode)
+                putExtra(FloatingBubbleService.EXTRA_RESULT_DATA, result.data)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            Toast.makeText(this, "🚀 バブルを起動しました！画面端の💬をタップしてください", Toast.LENGTH_SHORT).show()
+            updateUIState()
+        } else {
+            Toast.makeText(this, "⚠️ 画面キャプチャの許可がキャンセルされました", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val openTxtLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -48,20 +67,18 @@ class MainActivity : AppCompatActivity() {
         prefs = getSharedPreferences("line_ai_prefs", Context.MODE_PRIVATE)
         guard = FreeTierGuard(this)
         memoryManager = ConversationMemoryManager(this)
-
-        val editKey = findViewById<EditText>(R.id.editGeminiApiKey)
-        val textStatus = findViewById<TextView>(R.id.textFreeTierStatus)
-        val textUserStyleStatus = findViewById<TextView>(R.id.textUserStyleStatus)
-        val btnSave = findViewById<Button>(R.id.btnSave)
-        val btnAccessibility = findViewById<Button>(R.id.btnOpenAccessibility)
-        val btnOverlay = findViewById<Button>(R.id.btnOpenOverlay)
-        val btnTestBubble = findViewById<Button>(R.id.btnTestBubble)
-        val btnTestApiKey = findViewById<Button>(R.id.btnTestApiKey)
-        val btnImportLineTxt = findViewById<Button>(R.id.btnImportLineTxt)
-        val btnPasteChatLog = findViewById<Button>(R.id.btnPasteChatLog)
+        mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         val tvAppVersion = findViewById<TextView>(R.id.tvAppVersion)
         val btnCheckUpdate = findViewById<Button>(R.id.btnCheckUpdate)
+        val btnOpenOverlay = findViewById<Button>(R.id.btnOpenOverlay)
+        val btnStartBubble = findViewById<Button>(R.id.btnStartBubble)
+        val btnStopBubble = findViewById<Button>(R.id.btnStopBubble)
+        val editKey = findViewById<EditText>(R.id.editGeminiApiKey)
+        val btnTestApiKey = findViewById<Button>(R.id.btnTestApiKey)
+        val btnImportLineTxt = findViewById<Button>(R.id.btnImportLineTxt)
+        val btnPasteChatLog = findViewById<Button>(R.id.btnPasteChatLog)
+        val btnSave = findViewById<Button>(R.id.btnSave)
 
         tvAppVersion.text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
         btnCheckUpdate.setOnClickListener {
@@ -71,43 +88,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         editKey.setText(prefs.getString("gemini_key", ""))
-        updateStatus(textStatus, textUserStyleStatus)
 
-        val switchFloatingBubble = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.switchFloatingBubble)
-        switchFloatingBubble.isChecked = prefs.getBoolean("enable_floating_bubble", true)
-        switchFloatingBubble.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("enable_floating_bubble", isChecked).apply()
-            if (isChecked) {
-                Toast.makeText(this, "トーク画面でのバブル表示をONにしました", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "バブルを完全非表示にしました（画面端にアイコンは出なくなります）", Toast.LENGTH_LONG).show()
-            }
-        }
-
+        // Request notification permission for Android 13+ (for foreground service notification)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
             }
         }
 
-        val btnLaunchPayPayMode = findViewById<Button>(R.id.btnLaunchPayPayMode)
-        btnLaunchPayPayMode.setOnClickListener {
-            LineAccessibilityService.instance?.disableSelfWithRestoreNotification("PayPay") ?: run {
-                LineAccessibilityService.showRestoreNotification(this, "PayPay")
-            }
-            val payPayIntent = packageManager.getLaunchIntentForPackage("jp.ne.paypay.android.app")
-            if (payPayIntent != null) {
-                startActivity(payPayIntent)
-            } else {
-                Toast.makeText(this, "AI返信を一時停止しました（通知から1タップで再開できます）", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        btnAccessibility.setOnClickListener {
-            startActivity(LineAccessibilityService.getRestoreIntent(this))
-        }
-
-        btnOverlay.setOnClickListener {
+        btnOpenOverlay.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (!Settings.canDrawOverlays(this)) {
                     val intent = Intent(
@@ -121,9 +110,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnTestBubble.setOnClickListener {
+        btnStartBubble.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                Toast.makeText(this, "⚠️ 「重ねて表示」が未許可です。先にボタンから許可してください", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "⚠️ 先に「1. 重ねて表示を許可」してください", Toast.LENGTH_LONG).show()
                 val intent = Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:$packageName")
@@ -132,11 +121,16 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            Toast.makeText(
-                this,
-                "✅ 「重ねて表示」許可済みです！\nLINEやBumbleで「トーク画面」を開くと、画面端に「💬」ボタンが自動表示されます（トーク画面外では邪魔にならないよう自動で非表示になります）",
-                Toast.LENGTH_LONG
-            ).show()
+            screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+        }
+
+        btnStopBubble.setOnClickListener {
+            val stopIntent = Intent(this, FloatingBubbleService::class.java).apply {
+                action = FloatingBubbleService.ACTION_STOP
+            }
+            startService(stopIntent)
+            Toast.makeText(this, "⏹️ バブルを停止しました", Toast.LENGTH_SHORT).show()
+            updateUIState()
         }
 
         btnTestApiKey.setOnClickListener {
@@ -177,7 +171,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnPasteChatLog.setOnClickListener {
-            showPasteDialog(textUserStyleStatus)
+            showPasteDialog()
         }
 
         btnSave.setOnClickListener {
@@ -192,7 +186,7 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton("保存する") { _, _ ->
                         prefs.edit().putString("gemini_key", cleanKey).apply()
                         Toast.makeText(this, "APIキーを保存しました ✅", Toast.LENGTH_SHORT).show()
-                        updateStatus(textStatus, textUserStyleStatus)
+                        updateUIState()
                     }
                     .setNegativeButton("再確認する", null)
                     .show()
@@ -203,8 +197,43 @@ class MainActivity : AppCompatActivity() {
                 .putString("gemini_key", cleanKey)
                 .apply()
             Toast.makeText(this, "設定を保存しました！直ちに反映されます ✅", Toast.LENGTH_SHORT).show()
-            updateStatus(textStatus, textUserStyleStatus)
+            updateUIState()
         }
+
+        updateUIState()
+    }
+
+    private fun updateUIState() {
+        val tvBubbleStatus = findViewById<TextView>(R.id.tvBubbleStatus)
+        val btnOpenOverlay = findViewById<Button>(R.id.btnOpenOverlay)
+        val textFreeTierStatus = findViewById<TextView>(R.id.textFreeTierStatus)
+        val textUserStyleStatus = findViewById<TextView>(R.id.textUserStyleStatus)
+
+        // Overlay status
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+            btnOpenOverlay.text = "1. 重ねて表示: 許可済み ✅"
+        } else {
+            btnOpenOverlay.text = getString(R.string.btn_open_overlay)
+        }
+
+        // Bubble service running status
+        if (FloatingBubbleService.isRunning) {
+            tvBubbleStatus.text = "稼働状態: 稼働中 🟢（画面端の💬をタップしてAI返信）"
+            tvBubbleStatus.setBackgroundColor(0xFFE8F5E9.toInt())
+            tvBubbleStatus.setTextColor(0xFF1B5E20.toInt())
+        } else {
+            tvBubbleStatus.text = "稼働状態: 停止中 ⚪（上のボタンから起動）"
+            tvBubbleStatus.setBackgroundColor(0xFFF3F4F6.toInt())
+            tvBubbleStatus.setTextColor(0xFF374151.toInt())
+        }
+
+        // Usage count
+        val count = guard.getDailyUsage()
+        textFreeTierStatus.text = getString(R.string.status_free_tier, count)
+
+        // User style summary
+        val style = memoryManager.getUserStyle()
+        textUserStyleStatus.text = "俺スタイル（学習数 ${style.totalLearnedCount} 件）:\n${style.summary}"
     }
 
     private fun handleImportTxtUri(uri: Uri) {
@@ -220,7 +249,7 @@ class MainActivity : AppCompatActivity() {
                         .setTitle(if (success) "🧠 過去ログ学習完了！" else "⚠️ 学習失敗")
                         .setMessage(message)
                         .setPositiveButton("OK") { _, _ ->
-                            updateStatus(findViewById(R.id.textFreeTierStatus), findViewById(R.id.textUserStyleStatus))
+                            updateUIState()
                         }
                         .show()
                 }
@@ -230,7 +259,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showPasteDialog(statusTv: TextView?) {
+    private fun showPasteDialog() {
         val input = EditText(this).apply {
             hint = "LINEトーク履歴のテキスト、または自分の典型的な返信メッセージを複数行貼り付けてください"
             minLines = 6
@@ -254,7 +283,7 @@ class MainActivity : AppCompatActivity() {
                         .setTitle(if (success) "🧠 学習完了！" else "⚠️ 学習失敗")
                         .setMessage(message)
                         .setPositiveButton("OK") { _, _ ->
-                            updateStatus(findViewById(R.id.textFreeTierStatus), statusTv)
+                            updateUIState()
                         }
                         .show()
                 }
@@ -263,51 +292,8 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun updateStatus(tvFreeTier: TextView, tvUserStyle: TextView?) {
-        val count = guard.getDailyUsage()
-        tvFreeTier.text = getString(R.string.status_free_tier, count)
-
-        tvUserStyle?.let {
-            val style = memoryManager.getUserStyle()
-            it.text = "俺スタイル（学習数 ${style.totalLearnedCount} 件）:\n${style.summary}"
-        }
-
-        val btnAccessibility = findViewById<Button>(R.id.btnOpenAccessibility)
-        val btnOverlay = findViewById<Button>(R.id.btnOpenOverlay)
-
-        if (isAccessibilityEnabled()) {
-            btnAccessibility.text = "ユーザー補助: 有効 ✅"
-        } else {
-            btnAccessibility.text = getString(R.string.btn_open_accessibility)
-        }
-
-        if (isOverlayEnabled()) {
-            btnOverlay.text = "重ねて表示: 許可済み ✅"
-        } else {
-            btnOverlay.text = getString(R.string.btn_open_overlay)
-        }
-    }
-
-    private fun isAccessibilityEnabled(): Boolean {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        val myService = ComponentName(this, LineAccessibilityService::class.java).flattenToString()
-        return enabledServices.contains(myService, ignoreCase = true)
-    }
-
-    private fun isOverlayEnabled(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else true
-    }
-
     override fun onResume() {
         super.onResume()
-        findViewById<TextView>(R.id.textFreeTierStatus)?.let {
-            updateStatus(it, findViewById(R.id.textUserStyleStatus))
-        }
+        updateUIState()
     }
 }
