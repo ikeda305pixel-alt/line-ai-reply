@@ -15,6 +15,15 @@ import com.antigravity.lineaireply.ai.ConversationMemoryManager
 import com.antigravity.lineaireply.ai.FreeTierGuard
 import com.antigravity.lineaireply.ai.MessageTurn
 import com.antigravity.lineaireply.ai.SmartChatAssistant
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ComponentName
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.core.app.NotificationCompat
+import com.antigravity.lineaireply.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +37,7 @@ import kotlinx.coroutines.withContext
  * - Multi-turn partner memory persistence via [ConversationMemoryManager].
  * - Full chronological conversation history injection into AI reply generation.
  * - Non-intrusive floating trigger bubble and high-EQ suggestion overlay.
+ * - Automatic pause and 1-tap restore for PayPay and Japanese payment/banking apps.
  */
 class LineAccessibilityService : AccessibilityService() {
 
@@ -42,6 +52,92 @@ class LineAccessibilityService : AccessibilityService() {
         private const val TAG = "LineAccessService"
         const val PKG_LINE = "jp.naver.line.android"
         const val PKG_BUMBLE = "com.bumble.app"
+
+        const val CHANNEL_ID_PAYMENT = "ai_reply_payment_mode"
+        const val NOTIFICATION_ID_PAYMENT = 9901
+
+        val PAYMENT_PACKAGES = setOf(
+            "jp.ne.paypay.android.app",
+            "jp.co.rakuten.pay",
+            "com.nttdocomo.android.dpay",
+            "jp.auone.wallet",
+            "com.kouzoh.mercari",
+            "jp.naver.line.pay",
+            "jp.co.smbc.direct",
+            "jp.mufg.bk.app.bv",
+            "jp.co.mizuhobank.banking",
+            "jp.japanpost.jp_bank.app",
+            "jp.co.sevenbank.banking",
+            "com.mobilesuica.msb.android",
+            "jp.co.pasmo.app"
+        )
+
+        var instance: LineAccessibilityService? = null
+            private set
+
+        fun getRestoreIntent(context: Context): Intent {
+            val myComponent = ComponentName(context, LineAccessibilityService::class.java).flattenToString()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val detailIntent = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
+                    putExtra(Intent.EXTRA_COMPONENT_NAME, myComponent)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (context.packageManager.resolveActivity(detailIntent, 0) != null) {
+                    return detailIntent
+                }
+            }
+            return Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+
+        fun showRestoreNotification(context: Context, appName: String = "PayPay") {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID_PAYMENT,
+                    "決済・PayPay連携",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "PayPay等の決済時にAI返信を一時停止し、1タップで再開するための通知"
+                    setShowBadge(true)
+                    setSound(null, null)
+                    enableVibration(false)
+                }
+                nm.createNotificationChannel(channel)
+            }
+
+            val restoreIntent = getRestoreIntent(context)
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                1001,
+                restoreIntent,
+                flags
+            )
+
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID_PAYMENT)
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentTitle("💳 $appName 利用のためAI返信を一時停止しました")
+                .setContentText("決済完了後、ここをタップして1秒で再開できます")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setOngoing(true)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .addAction(
+                    R.drawable.ic_launcher,
+                    "⚡ AI返信を再開する",
+                    pendingIntent
+                )
+                .build()
+
+            nm.notify(NOTIFICATION_ID_PAYMENT, notification)
+        }
     }
 
     override fun onCreate() {
@@ -53,6 +149,26 @@ class LineAccessibilityService : AccessibilityService() {
 
         val key = prefs.getString("gemini_key", "") ?: ""
         assistant = SmartChatAssistant(key, guard, memoryManager)
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        instance = this
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        nm?.cancel(NOTIFICATION_ID_PAYMENT)
+    }
+
+    fun disableSelfWithRestoreNotification(targetAppName: String = "PayPay") {
+        try {
+            overlayManager.hideAll()
+            stopSafetyWatcher()
+            showRestoreNotification(this, targetAppName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                disableSelf()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during disableSelf: ${e.message}", e)
+        }
     }
 
     private var safetyWatchJob: Job? = null
@@ -132,7 +248,24 @@ class LineAccessibilityService : AccessibilityService() {
         }
 
         // CRITICAL PROTECTION FOR PAYPAY & FINANCIAL APPS:
-        // If user is in ANY app other than LINE or Bumble (Home, PayPay, Settings, SystemUI, etc.),
+        // Automatically pause accessibility service so PayPay and banking apps are NEVER blocked by security SDK
+        if (PAYMENT_PACKAGES.contains(pkg)) {
+            Log.i(TAG, "Payment app detected ($pkg). Pausing service immediately with restore notification.")
+            val appName = when (pkg) {
+                "jp.ne.paypay.android.app" -> "PayPay"
+                "jp.co.rakuten.pay" -> "楽天ペイ"
+                "com.nttdocomo.android.dpay" -> "d払い"
+                "jp.auone.wallet" -> "au PAY"
+                "com.kouzoh.mercari" -> "メルペイ"
+                "jp.naver.line.pay" -> "LINE Pay"
+                else -> "決済アプリ"
+            }
+            disableSelfWithRestoreNotification(appName)
+            return
+        }
+
+        // CRITICAL PROTECTION:
+        // If user is in ANY app other than LINE or Bumble (Home, Settings, SystemUI, etc.),
         // IMMEDIATELY HIDE AND DESTROY ALL OVERLAYS!
         if (pkg != PKG_LINE && pkg != PKG_BUMBLE) {
             overlayManager.hideAll()
@@ -451,6 +584,9 @@ class LineAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
         stopSafetyWatcher()
         overlayManager.hideAll()
     }

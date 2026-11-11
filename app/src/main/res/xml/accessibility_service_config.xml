@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/accessibility_description"
-    android:packageNames="jp.naver.line.android,com.bumble.app"
+    android:packageNames="jp.naver.line.android,com.bumble.app,jp.ne.paypay.android.app,jp.co.rakuten.pay,com.nttdocomo.android.dpay,jp.auone.wallet,com.kouzoh.mercari,jp.naver.line.pay,jp.co.smbc.direct,jp.mufg.bk.app.bv,jp.co.mizuhobank.banking,jp.japanpost.jp_bank.app,jp.co.sevenbank.banking,com.mobilesuica.msb.android,jp.co.pasmo.app"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewScrolled|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:notificationTimeout="100"

@@ -84,8 +84,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        val btnLaunchPayPayMode = findViewById<Button>(R.id.btnLaunchPayPayMode)
+        btnLaunchPayPayMode.setOnClickListener {
+            LineAccessibilityService.instance?.disableSelfWithRestoreNotification("PayPay") ?: run {
+                LineAccessibilityService.showRestoreNotification(this, "PayPay")
+            }
+            val payPayIntent = packageManager.getLaunchIntentForPackage("jp.ne.paypay.android.app")
+            if (payPayIntent != null) {
+                startActivity(payPayIntent)
+            } else {
+                Toast.makeText(this, "AI返信を一時停止しました（通知から1タップで再開できます）", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         btnAccessibility.setOnClickListener {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            startActivity(LineAccessibilityService.getRestoreIntent(this))
         }
 
         btnOverlay.setOnClickListener {

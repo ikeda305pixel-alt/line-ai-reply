@@ -139,6 +139,58 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- PayPay & Payment Apps Protection Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:strokeColor="#FEE2E2"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="💳 PayPay / 決済アプリ連携"
+                    android:textColor="#DC2626"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="PayPay起動時にセキュリティ検知でブロックされないよう、自動一時停止＆1タップ再開通知を提供します。"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnLaunchPayPayMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="#EF4444"
+                    android:text="💳 PayPayモード起動（AI返信一時停止）" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="#FEF2F2"
+                    android:padding="8dp"
+                    android:text="💡 クイック設定タイル対応！\n画面上部の通知バーを引き下げて『PayPay決済 (AI停止)』タイルを追加すると、レジ前でワンタップでAI返信を停止してPayPayを即起動できます。お支払い後は通知をタップして1秒で再開できます。"
+                    android:textColor="#991B1B"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Gemini API Key Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"

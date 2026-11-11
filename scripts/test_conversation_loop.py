@@ -362,11 +362,13 @@ def test_ui_chat_confinement_and_anti_duplication():
     print("UI chat room confinement & anti-duplication suite: PASS ✅")
 
 def test_paypay_and_financial_app_protection():
-    # 1. Config verification
+    # 1. Config verification: must include LINE & Bumble for AI assistance, plus PayPay for auto-pause
     with open("app/src/main/res/xml/accessibility_service_config.xml") as f:
         config_text = f.read()
-    assert 'android:packageNames="jp.naver.line.android,com.bumble.app"' in config_text, \
-        "accessibility_service_config.xml MUST restrict packageNames strictly to LINE and Bumble!"
+    assert "jp.naver.line.android" in config_text and "com.bumble.app" in config_text, \
+        "accessibility_service_config.xml MUST include LINE and Bumble!"
+    assert "jp.ne.paypay.android.app" in config_text, \
+        "accessibility_service_config.xml MUST include PayPay for auto-pause detection!"
 
     # 2. Package isolation check
     financial_and_system_apps = [
@@ -388,7 +390,40 @@ def test_paypay_and_financial_app_protection():
     for app in financial_and_system_apps:
         assert not overlay_allowed_in_package(app), f"Overlay MUST NEVER be allowed in {app}! It blocks PayPay and financial apps!"
 
-    print("PayPay & financial app 100% zero-interference suite: PASS ✅")
+    # Verify accessibility_service_config.xml includes PayPay & payment packages
+    with open("app/src/main/res/xml/accessibility_service_config.xml") as f:
+        config_xml = f.read()
+    assert "jp.ne.paypay.android.app" in config_xml, "accessibility_service_config.xml MUST include PayPay package!"
+    assert "jp.co.rakuten.pay" in config_xml, "accessibility_service_config.xml MUST include Rakuten Pay!"
+
+    # Verify LineAccessibilityService contains disableSelfWithRestoreNotification & showRestoreNotification
+    with open("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt") as f:
+        service_code = f.read()
+    assert "disableSelfWithRestoreNotification" in service_code, "LineAccessibilityService MUST implement disableSelfWithRestoreNotification!"
+    assert "showRestoreNotification" in service_code, "LineAccessibilityService MUST implement showRestoreNotification!"
+    assert "PAYMENT_PACKAGES" in service_code, "LineAccessibilityService MUST define PAYMENT_PACKAGES!"
+    assert "disableSelf()" in service_code, "LineAccessibilityService MUST call disableSelf() to remove itself from OS enabled list!"
+
+    # Verify PayPayTileService exists and handles tile clicks
+    with open("app/src/main/java/com/antigravity/lineaireply/service/PayPayTileService.kt") as f:
+        tile_code = f.read()
+    assert "class PayPayTileService : TileService()" in tile_code, "PayPayTileService must extend TileService!"
+    assert "disableSelfWithRestoreNotification" in tile_code, "PayPayTileService must call disableSelfWithRestoreNotification!"
+    assert "startActivityAndCollapse" in tile_code, "PayPayTileService must collapse notification panel on launch!"
+
+    # Verify AndroidManifest.xml registers PayPayTileService and POST_NOTIFICATIONS
+    with open("app/src/main/AndroidManifest.xml") as f:
+        manifest_xml = f.read()
+    assert "android.permission.POST_NOTIFICATIONS" in manifest_xml, "Manifest must declare POST_NOTIFICATIONS permission!"
+    assert ".service.PayPayTileService" in manifest_xml or "PayPayTileService" in manifest_xml, "Manifest must register PayPayTileService!"
+    assert "android.permission.BIND_QUICK_SETTINGS_TILE" in manifest_xml, "PayPayTileService must require BIND_QUICK_SETTINGS_TILE!"
+
+    # Verify version 1.5.7 in build.gradle
+    with open("app/build.gradle") as f:
+        build_gradle = f.read()
+    assert 'versionName "1.5.7"' in build_gradle, "build.gradle MUST specify versionName 1.5.7!"
+
+    print("PayPay & financial app 100% zero-interference & auto-pause suite: PASS ✅")
 
 def test_polite_tone_detection_and_matching():
     # v1.5.6 regex: no trailing anchor, handles emojis and kanji/hiragana+ます
@@ -590,7 +625,7 @@ def main():
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    print("All loop engineering v1.5.6 tests: 100% PASSED! 🚀")
+    print("All loop engineering v1.5.7 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

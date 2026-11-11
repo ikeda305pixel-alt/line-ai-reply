@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.6.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.5.7.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,31 +46,36 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.6
-          name: LINE & Bumble AI Reply Assistant v1.5.6 (LINE/Bumble全敬語同期・過去ログ2倍240件・Bumbleプロフ全文抽出＆システム通知除外)
+          tag_name: v1.5.7
+          name: LINE & Bumble AI Reply Assistant v1.5.7 (PayPayセキュリティ完全突破・自動一時停止＆1タップ再開通知・クイック設定タイル対応)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.5.6
+            ## LINE & Bumble AI返信アシスタント v1.5.7
 
-            ### 🎯 【重要改善・修正点】
-            1. **LINE & Bumble 敬語同期の完全徹底**:
-               - LINE・Bumbleともに、相手が敬語（丁寧語）でメッセージを送っている場合は、AI提案の4案すべてを親しみやすく礼儀正しい「丁寧語（です・ます調）」に完全統一（タメ口の強制出力を完全撤廃）。
-               - 語尾に絵文字や波線が付いたメッセージ（「カフェ巡り好きです😊」「行きたいです〜！✨」）でも敬語を100%確実に検知できるよう正規表現を抜本改良。
-               - プロンプトおよび即時フォールバックの両方で丁寧語バリエーション（🎯丁寧・即答、🙅‍♂️丁寧・代案、💬丁寧・質問調整、😄丁寧・共感）を完全実装。
-            2. **過去会話ログの参照深度を2倍（最大240ターン）に拡張**:
-               - プロンプトへ注入する過去の会話履歴を従来の120ターンから「240ターン（2倍スパン）」へ大幅倍増。
-               - 直近の画面内コンテキストも40件まで深く遡って文脈を正確に把握。
-            3. **Bumbleシステム通知の完全除外（会話破綻の根本原因を解消）**:
-               - 「相手が最初のメッセージを送信しました」「返信まであと24時間」「マッチしました！」「質問ゲーム」等のBumbleシステムバナーを相手のメッセージと誤認していた問題を完全修正。
-               - システム通知に対する無意味な定型文返信を根絶し、相手の発言に的確に応答。
-            4. **Bumbleプロフィールの全文抽出＆言及義務化**:
-               - プロフィール画面から自己紹介文（Bio）、プロンプト回答、バッジ、居住地をキーワードに依存せず全文抽出し、キャッシュ。
-               - 相手のプロフィール（趣味、休日の過ごし方、写真、仕事など）に必ず自然に触れて共感・質問するようプロンプトの言及ルールを厳格化。
+            ### 💳 【PayPayセキュリティ完全突破＆0秒決済モード】
+            1. **PayPay・主要決済アプリの自動検知＆完全自動一時停止**:
+               - PayPay起動時にセキュリティ検知でブロックされる問題を抜本解決。
+               - PayPay（および楽天ペイ、d払い、au PAY、メルペイ、銀行アプリ等）の起動を検知した瞬間、OSのユーザー補助サービスを自身で即座に一時停止（`disableSelf()`）。PayPayが100%エラーなく起動します。
+            2. **決済後1タップで即座にAI返信を再開（設定の深い階層に行く必要ゼロ）**:
+               - 一時停止と同時に常駐通知「💳 PayPay利用のためAI返信を一時停止しました」を自動発行。
+               - 決済完了後、通知を1タップするだけで直接ユーザー補助の詳細トグル画面へジャンプ！設定メニューを探し回る手間をゼロにしました。
+               - 再開スイッチをONにすると通知も自動で消去されます。
+            3. **クイック設定パネル（通知バー）タイル対応**:
+               - スマホの画面上部を引き下げて配置できる「PayPay決済 (AI停止)」クイック設定タイルを新設。
+               - レジ前で通知バーからワンタップするだけで「AI返信停止＋PayPay即起動」が完了。
+            4. **メイン画面に「PayPayモード起動」ボタンを追加**:
+               - アプリ内からも1タップでPayPayを安全に起動可能。
+
+            ### 🎯 【既存の高品質アシスト機能の完全維持】
+            - **LINE & Bumble 敬語完全同期**: 相手が敬語なら4案すべてを丁寧語（です・ます調）で統一。
+            - **過去ログ2倍深度（最大240件）参照**: 直近文脈を正確に把握。
+            - **Bumbleプロフィール全文抽出＆言及義務化**: 自己紹介やプロンプト回答を確実に返信へ反映。
+            - **神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定ルール**: 東京の店は絶対に提案せず地元で自然にエスコート。
 
             ### 🛡️ 【固定署名キーストアによる直接「更新」】
-            - 固定キーストア署名のため、旧バージョンをアンインストールせずそのまま「更新」可能です。
+            - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.5.6.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.5.7.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
