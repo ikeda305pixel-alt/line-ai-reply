@@ -48,6 +48,8 @@ class SmartChatAssistant(
                 DynamicModelRouterPlugin.cachedWorkingModel = value
             }
 
+        val FALLBACK_CANDIDATE_MODELS = DynamicModelRouterPlugin.CANDIDATE_MODELS
+
         fun sanitizeApiKey(rawKey: String): String = DynamicModelRouterPlugin.sanitizeKey(rawKey)
 
         fun isValidApiKey(rawKey: String): Boolean {
