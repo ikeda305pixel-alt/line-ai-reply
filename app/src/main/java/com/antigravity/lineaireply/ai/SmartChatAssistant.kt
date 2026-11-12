@@ -8,6 +8,17 @@ import com.antigravity.lineaireply.plugin.PersonaSynthesizerPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class SmartReplyOption(
+    val label: String,
+    val text: String
+)
+
+data class GenerationResult(
+    val options: List<SmartReplyOption>,
+    val engine: String,
+    val errorDetails: String? = null
+)
+
 /**
  * High-EQ AI Chat Assistant that coordinates:
  * 1. Multimodal Gemini Vision analysis of recent screenshots (OS screenshot auto-detection).
