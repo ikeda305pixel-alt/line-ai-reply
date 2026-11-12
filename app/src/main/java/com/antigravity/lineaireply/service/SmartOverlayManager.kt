@@ -271,7 +271,7 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         val originalFlags = params.flags
-        // Clear FLAG_NOT_FOCUSABLE to allow window focus
+        // Temporarily clear FLAG_NOT_FOCUSABLE to allow window focus
         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
         v.isFocusable = true
         v.isFocusableInTouchMode = true
@@ -283,7 +283,10 @@ class SmartOverlayManager(private val context: Context) {
             Log.w(TAG, "Failed requesting focus: ${e.message}")
         }
 
-        v.postDelayed({
+        var handled = false
+        fun retrieveAndRestore() {
+            if (handled) return
+            handled = true
             val clipText = readClipboardDirect()
 
             // Restore original flags
@@ -295,7 +298,25 @@ class SmartOverlayManager(private val context: Context) {
             }
 
             onResult(clipText)
-        }, 50)
+        }
+
+        // Detect window focus change or fallback after 100ms
+        v.viewTreeObserver?.addOnWindowFocusChangeListener(object : android.view.ViewTreeObserver.OnWindowFocusChangeListener {
+            override fun onWindowFocusChanged(hasFocus: Boolean) {
+                if (hasFocus) {
+                    try {
+                        v.viewTreeObserver?.removeOnWindowFocusChangeListener(this)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed removing focus listener: ${e.message}")
+                    }
+                    retrieveAndRestore()
+                }
+            }
+        })
+
+        v.postDelayed({
+            retrieveAndRestore()
+        }, 100)
     }
 
     private fun readClipboardDirect(): String? {
@@ -321,6 +342,7 @@ class SmartOverlayManager(private val context: Context) {
         currentMode: AssistantMode = AssistantMode.REPLY,
         screenshotName: String? = null,
         clipboardText: String? = null,
+        alertMessage: String? = null,
         options: List<SmartReplyOption>,
         onModeSelected: (AssistantMode) -> Unit,
         onSelect: (String) -> Unit,
@@ -393,7 +415,16 @@ class SmartOverlayManager(private val context: Context) {
         v.findViewById<Button>(R.id.btnModeTopic)?.let { updateModeButton(it, AssistantMode.TOPIC) }
         v.findViewById<Button>(R.id.btnModeMood)?.let { updateModeButton(it, AssistantMode.MOOD) }
 
-        // 3. Screenshot Preview Banner
+        // 3. Error / Alert Banner
+        val tvAlert = v.findViewById<TextView>(R.id.textAlertBanner)
+        if (!alertMessage.isNullOrBlank()) {
+            tvAlert?.visibility = View.VISIBLE
+            tvAlert?.text = alertMessage
+        } else {
+            tvAlert?.visibility = View.GONE
+        }
+
+        // 4. Screenshot Preview Banner
         val tvScreenshot = v.findViewById<TextView>(R.id.textScreenshotPreview)
         if (!screenshotName.isNullOrBlank()) {
             tvScreenshot?.visibility = View.VISIBLE
@@ -402,7 +433,7 @@ class SmartOverlayManager(private val context: Context) {
             tvScreenshot?.visibility = View.GONE
         }
 
-        // 4. Clipboard Preview Banner
+        // 5. Clipboard Preview Banner
         val tvClipboard = v.findViewById<TextView>(R.id.textClipboardPreview)
         if (!clipboardText.isNullOrBlank()) {
             tvClipboard?.visibility = View.VISIBLE
@@ -412,12 +443,12 @@ class SmartOverlayManager(private val context: Context) {
             tvClipboard?.visibility = View.GONE
         }
 
-        // 5. Mini Input Box (visible if neither screenshot nor clipboard, or if options empty)
+        // 6. Mini Input Box (visible when neither screenshot nor clipboard and options empty, unless alert shown)
         val layoutMini = v.findViewById<LinearLayout>(R.id.layoutMiniInput)
         val editMini = v.findViewById<EditText>(R.id.editMiniPrompt)
         val btnMini = v.findViewById<Button>(R.id.btnMiniGenerate)
 
-        val needsMiniInput = screenshotName.isNullOrBlank() && clipboardText.isNullOrBlank() && options.isEmpty()
+        val needsMiniInput = alertMessage.isNullOrBlank() && screenshotName.isNullOrBlank() && clipboardText.isNullOrBlank() && options.isEmpty()
         layoutMini?.visibility = if (needsMiniInput) View.VISIBLE else View.GONE
 
         btnMini?.setOnClickListener {
@@ -427,6 +458,14 @@ class SmartOverlayManager(private val context: Context) {
             } else {
                 Toast.makeText(context, "一言メモまたはキーワードを入力してください", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // 7. Options Layout (hidden if alert is showing)
+        val optionsLayout = v.findViewById<LinearLayout>(R.id.optionsLayout)
+        if (!alertMessage.isNullOrBlank()) {
+            optionsLayout?.visibility = View.GONE
+        } else {
+            optionsLayout?.visibility = View.VISIBLE
         }
 
         // 6. 4 Selectable Reply Options

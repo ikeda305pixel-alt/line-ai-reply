@@ -33,7 +33,7 @@
             android:exported="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Floating assistant overlay for chat reply generation" />
+                android:value="Floating AI reply assistant overlay" />
         </service>
 
     </application>

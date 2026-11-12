@@ -31,19 +31,36 @@ object ScreenshotDetectionHelper {
     )
 
     /**
-     * Finds the most recent screenshot taken within [maxAgeSeconds] (default: 15s).
+     * Checks if the file name or relative path matches standard screenshot naming conventions.
+     */
+    fun isScreenshot(displayName: String, relativePath: String?): Boolean {
+        val nameLower = displayName.lowercase()
+        val pathLower = (relativePath ?: "").lowercase()
+        return nameLower.startsWith("screenshot") ||
+               nameLower.contains("screenshot") ||
+               nameLower.contains("スクリーンショット") ||
+               pathLower.contains("screenshots") ||
+               pathLower.contains("スクリーンショット")
+    }
+
+    /**
+     * Finds the most recent screenshot taken within [maxAgeSeconds] (default: 20s).
      * Returns ScreenshotInfo with Base64 JPEG if found, or null if none found within the time window.
      */
-    fun getRecentScreenshot(context: Context, maxAgeSeconds: Long = 15): ScreenshotInfo? {
+    fun getRecentScreenshot(context: Context, maxAgeSeconds: Long = 20): ScreenshotInfo? {
         val nowSeconds = System.currentTimeMillis() / 1000
-        val minDateSeconds = nowSeconds - maxAgeSeconds
 
-        val projection = arrayOf(
+        val projectionList = mutableListOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DISPLAY_NAME,
             MediaStore.Images.Media.DATE_ADDED
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            projectionList.add(MediaStore.Images.Media.RELATIVE_PATH)
+            projectionList.add(MediaStore.Images.Media.IS_PENDING)
+        }
 
+        val projection = projectionList.toTypedArray()
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
         return try {
@@ -59,21 +76,35 @@ object ScreenshotDetectionHelper {
                 val idCol = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
                 val dateCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                val pathCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    c.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
+                } else -1
+                val pendingCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    c.getColumnIndex(MediaStore.Images.Media.IS_PENDING)
+                } else -1
 
                 var checkedCount = 0
-                while (c.moveToNext() && checkedCount < 5) {
+                while (c.moveToNext() && checkedCount < 10) {
                     checkedCount++
                     val id = c.getLong(idCol)
                     val name = c.getString(nameCol) ?: ""
                     val dateAdded = c.getLong(dateCol)
+                    val relPath = if (pathCol != -1) c.getString(pathCol) else null
+                    val isPending = if (pendingCol != -1) c.getInt(pendingCol) else 0
 
-                    // Verify screenshot age is within 15 seconds
+                    // 1. Must not be currently pending / written (IS_PENDING == 0)
+                    if (isPending != 0) continue
+
+                    // 2. Must match screenshot naming/folder conventions
+                    if (!isScreenshot(name, relPath)) continue
+
+                    // 3. Verify screenshot age is within 20 seconds
                     val age = nowSeconds - dateAdded
                     if (age in 0..maxAgeSeconds) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                        val base64 = loadAndEncodeScreenshot(context, uri)
+                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 1280)
                         if (base64 != null) {
-                            Log.i(TAG, "Recent screenshot detected: $name (age: ${age}s)")
+                            Log.i(TAG, "Recent screenshot detected: $name in $relPath (age: ${age}s)")
                             return ScreenshotInfo(uri, name, dateAdded, base64)
                         }
                     }
@@ -87,12 +118,12 @@ object ScreenshotDetectionHelper {
     }
 
     /**
-     * Downscales the screenshot image to at most 1080px and compresses to Base64 JPEG.
+     * Downscales the screenshot image to at most 1280px and compresses to Base64 JPEG.
      */
     fun loadAndEncodeScreenshot(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 1080,
+        maxDimension: Int = 1280,
         quality: Int = 80
     ): String? {
         return try {
@@ -171,8 +202,8 @@ object ScreenshotDetectionHelper {
 
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
-            // Query latest screenshot (within last 10s)
-            val info = getRecentScreenshot(context, maxAgeSeconds = 10)
+            // Query latest screenshot (within last 20s)
+            val info = getRecentScreenshot(context, maxAgeSeconds = 20)
             if (info != null && info.uri != lastDetectedUri) {
                 lastDetectedUri = info.uri
                 onNewScreenshot(info)

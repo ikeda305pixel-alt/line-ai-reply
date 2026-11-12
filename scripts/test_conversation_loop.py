@@ -397,11 +397,11 @@ def test_paypay_and_financial_app_protection():
     assert "FloatingBubbleService" in manifest_xml, \
         "Manifest must register FloatingBubbleService!"
 
-    # 3. Verify version 1.8.0 in build.gradle
+    # 3. Verify version 1.9.0 in build.gradle
     with open("app/build.gradle") as f:
         build_gradle = f.read()
-    assert 'versionName "1.8.0"' in build_gradle, "build.gradle MUST specify versionName 1.8.0!"
-    assert 'versionCode 25' in build_gradle, "build.gradle MUST specify versionCode 25!"
+    assert 'versionName "1.9.0"' in build_gradle, "build.gradle MUST specify versionName 1.9.0!"
+    assert 'versionCode 26' in build_gradle, "build.gradle MUST specify versionCode 26!"
 
     print("PayPay, Banking app & Android 15 zero-interference suite: PASS ✅")
 
@@ -573,6 +573,10 @@ def test_screenshot_and_clipboard_architecture():
     assert "loadAndEncodeScreenshot" in helper_code, "ScreenshotDetectionHelper must provide loadAndEncodeScreenshot!"
     assert "deleteScreenshot" in helper_code, "ScreenshotDetectionHelper must provide deleteScreenshot!"
     assert "ScreenshotObserver" in helper_code, "ScreenshotDetectionHelper must provide ScreenshotObserver!"
+    assert "maxAgeSeconds = 20" in helper_code, "ScreenshotObserver must query within 20s!"
+    assert "maxDimension = 1280" in helper_code, "loadAndEncodeScreenshot must default to 1280px!"
+    assert "IS_PENDING" in helper_code, "ScreenshotDetectionHelper must check IS_PENDING on Android 10+!"
+    assert "isScreenshot" in helper_code, "ScreenshotDetectionHelper must validate isScreenshot!"
 
     # 2. SmartOverlayManager verification (Window Focus Trick + Bottom Dock Bar)
     with open("app/src/main/java/com/antigravity/lineaireply/service/SmartOverlayManager.kt") as f:
@@ -583,6 +587,7 @@ def test_screenshot_and_clipboard_architecture():
     assert "showReplies" in overlay_code, "SmartOverlayManager must provide showReplies!"
     assert "snapToEdge" in overlay_code, "SmartOverlayManager must support snapToEdge!"
     assert "copyToClipboard" in overlay_code, "SmartOverlayManager must support copyToClipboard!"
+    assert "textAlertBanner" in overlay_code, "SmartOverlayManager must handle textAlertBanner!"
 
     # 3. SmartChatAssistant 4 Action Modes & Vision/Clipboard routing
     with open("app/src/main/java/com/antigravity/lineaireply/ai/SmartChatAssistant.kt") as f:
@@ -595,6 +600,8 @@ def test_screenshot_and_clipboard_architecture():
     assert "generateFromScreenshot" in assistant_code, "SmartChatAssistant must provide generateFromScreenshot!"
     assert "generateFromClipboard" in assistant_code, "SmartChatAssistant must provide generateFromClipboard!"
     assert "generateFromUserNote" in assistant_code, "SmartChatAssistant must provide generateFromUserNote!"
+    assert "isValidApiKey" in assistant_code, "SmartChatAssistant must provide isValidApiKey!"
+    assert "AIzaSy" in assistant_code, "SmartChatAssistant must check AIzaSy prefix!"
     assert "厚木" in assistant_code and "茅ヶ崎" in assistant_code and "海老名" in assistant_code and "横浜" in assistant_code, \
         "Schedule mode must enforce Kanagawa locations!"
 
@@ -604,6 +611,10 @@ def test_screenshot_and_clipboard_architecture():
     assert "getRecentScreenshot" in service_code, "FloatingBubbleService must check recent screenshots first!"
     assert "readClipboardWithFocusTrick" in service_code, "FloatingBubbleService must check clipboard second!"
     assert "generateFromUserNote" in service_code, "FloatingBubbleService must support mini input third!"
+    assert "maxAgeSeconds = 20" in service_code, "FloatingBubbleService must check within 20s!"
+    assert "📷 スクショを解析中..." in service_code, "FloatingBubbleService must show screenshot analysis banner!"
+    assert "📋 コピー文面を解析中..." in service_code, "FloatingBubbleService must show clipboard analysis banner!"
+    assert "AIzaSy" in service_code or "isValidApiKey" in service_code, "FloatingBubbleService must check API key!"
 
     # 5. MainActivity Media Permission & Overlay flow (Zero MediaProjection / Zero Accessibility)
     with open("app/src/main/java/com/antigravity/lineaireply/MainActivity.kt") as f:
@@ -615,7 +626,20 @@ def test_screenshot_and_clipboard_architecture():
     assert "switchAutoDeleteScreenshot" in main_code, "MainActivity must have switchAutoDeleteScreenshot!"
     assert "FloatingBubbleService.ACTION_START" in main_code, "MainActivity must launch FloatingBubbleService!"
 
-    print("Screenshot auto-detection, clipboard focus trick & 4 Assistant Modes suite: PASS ✅")
+    # 6. AndroidManifest & Gradle version verification
+    with open("app/src/main/AndroidManifest.xml") as f:
+        manifest_code = f.read()
+    assert "PROPERTY_SPECIAL_USE_FGS_SUBTYPE" in manifest_code, "AndroidManifest must define PROPERTY_SPECIAL_USE_FGS_SUBTYPE!"
+    assert "Floating AI reply assistant overlay" in manifest_code, "AndroidManifest must specify specialUse subtype!"
+    assert "MediaProjection" not in manifest_code, "AndroidManifest must have zero MediaProjection!"
+    assert "AccessibilityService" not in manifest_code, "AndroidManifest must have zero AccessibilityService!"
+
+    with open("app/build.gradle") as f:
+        gradle_code = f.read()
+    assert 'versionCode 26' in gradle_code, "build.gradle must have versionCode 26!"
+    assert 'versionName "1.9.0"' in gradle_code, "build.gradle must have versionName 1.9.0!"
+
+    print("Screenshot auto-detection (20s/1280px/IS_PENDING), clipboard focus trick & error transparency suite: PASS ✅")
 
 def test_bumble_system_filter_and_profile_extraction():
     bumble_sys_regex = r"(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)"
@@ -666,7 +690,7 @@ def main():
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
     test_screenshot_and_clipboard_architecture()
-    print("All loop engineering v1.8.0 tests: 100% PASSED! 🚀")
+    print("All loop engineering v1.9.0 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

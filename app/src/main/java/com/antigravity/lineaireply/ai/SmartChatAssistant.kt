@@ -50,10 +50,19 @@ class SmartChatAssistant(
 
         fun sanitizeApiKey(rawKey: String): String = DynamicModelRouterPlugin.sanitizeKey(rawKey)
 
+        fun isValidApiKey(rawKey: String): Boolean {
+            val clean = sanitizeApiKey(rawKey)
+            return clean.startsWith("AIzaSy") && clean.length >= 25
+        }
+
         suspend fun testApiKey(apiKey: String): Pair<Boolean, String> {
+            val cleanKey = sanitizeApiKey(apiKey)
+            if (!isValidApiKey(cleanKey)) {
+                return Pair(false, "Gemini APIキーは「AIzaSy」から始まる文字列を入力してください。")
+            }
             val router = DynamicModelRouterPlugin()
             val result = router.generateContent(
-                apiKey = apiKey,
+                apiKey = cleanKey,
                 prompt = "返信テストです。[{\"label\":\"テスト\",\"text\":\"OK\"}]の形式で返してください。"
             )
             return if (result.success) {
@@ -88,11 +97,19 @@ class SmartChatAssistant(
         )
         val accumulatedHistory = memoryManager?.getAccumulatedConversation(context.partnerName) ?: emptyList()
 
-        if (currentKey.isBlank() || !guard.canRequest()) {
+        if (!isValidApiKey(currentKey)) {
             return@withContext GenerationResult(
-                options = synthesizer.createFallbackReplies(context, accumulatedHistory, userStyle, shouldInvite),
-                engine = "定型文",
-                errorDetails = if (currentKey.isBlank()) "APIキー未設定" else "利用枠上限"
+                options = emptyList(),
+                engine = "⚠️ APIキー未設定",
+                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
+            )
+        }
+
+        if (!guard.canRequest()) {
+            return@withContext GenerationResult(
+                options = emptyList(),
+                engine = "⚠️ 利用枠上限",
+                errorDetails = "1日の無料利用枠に達しました"
             )
         }
 
@@ -123,9 +140,9 @@ class SmartChatAssistant(
         }
 
         GenerationResult(
-            options = synthesizer.createFallbackReplies(context, accumulatedHistory, userStyle, shouldInvite),
-            engine = "定型文 (通信エラー)",
-            errorDetails = modelResult.errorMessage ?: "接続失敗"
+            options = emptyList(),
+            engine = "❌ 通信エラー",
+            errorDetails = modelResult.errorMessage ?: "API通信に失敗しました"
         )
     }
 
@@ -139,20 +156,19 @@ class SmartChatAssistant(
         userPromptNote: String? = null
     ): GenerationResult = withContext(Dispatchers.IO) {
         val currentKey = apiKey.trim()
-        val fallbackOptions = getFallbackOptions(isPolite = false, mode = mode)
 
-        if (currentKey.isBlank()) {
+        if (!isValidApiKey(currentKey)) {
             return@withContext GenerationResult(
-                options = fallbackOptions,
-                engine = "定型文 (※設定画面でAPIキーを保存してください)",
-                errorDetails = "APIキー未設定"
+                options = emptyList(),
+                engine = "⚠️ APIキー未設定",
+                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
             )
         }
 
         if (!guard.canRequest()) {
             return@withContext GenerationResult(
-                options = fallbackOptions,
-                engine = "定型文 (利用枠上限)",
+                options = emptyList(),
+                engine = "⚠️ 利用枠上限",
                 errorDetails = "1日の無料利用枠に達しました"
             )
         }
@@ -182,9 +198,9 @@ class SmartChatAssistant(
         }
 
         GenerationResult(
-            options = fallbackOptions,
-            engine = "定型文 (Vision通信エラー)",
-            errorDetails = modelResult.errorMessage ?: "全モデル接続失敗"
+            options = emptyList(),
+            engine = "❌ 通信エラー",
+            errorDetails = modelResult.errorMessage ?: "Gemini Vision APIとの通信に失敗しました"
         )
     }
 
@@ -198,20 +214,19 @@ class SmartChatAssistant(
     ): GenerationResult = withContext(Dispatchers.IO) {
         val currentKey = apiKey.trim()
         val isPolite = detectPolite(clipboardText)
-        val fallbackOptions = getFallbackOptions(isPolite = isPolite, mode = mode)
 
-        if (currentKey.isBlank()) {
+        if (!isValidApiKey(currentKey)) {
             return@withContext GenerationResult(
-                options = fallbackOptions,
-                engine = "定型文 (※設定画面でAPIキーを保存してください)",
-                errorDetails = "APIキー未設定"
+                options = emptyList(),
+                engine = "⚠️ APIキー未設定",
+                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
             )
         }
 
         if (!guard.canRequest()) {
             return@withContext GenerationResult(
-                options = fallbackOptions,
-                engine = "定型文 (利用枠上限)",
+                options = emptyList(),
+                engine = "⚠️ 利用枠上限",
                 errorDetails = "1日の無料利用枠に達しました"
             )
         }
@@ -244,9 +259,9 @@ class SmartChatAssistant(
         }
 
         GenerationResult(
-            options = fallbackOptions,
-            engine = "定型文 (通信エラー)",
-            errorDetails = modelResult.errorMessage ?: "接続失敗"
+            options = emptyList(),
+            engine = "❌ 通信エラー",
+            errorDetails = modelResult.errorMessage ?: "Gemini APIとの通信に失敗しました"
         )
     }
 
@@ -259,13 +274,12 @@ class SmartChatAssistant(
     ): GenerationResult = withContext(Dispatchers.IO) {
         val currentKey = apiKey.trim()
         val isPolite = detectPolite(userPromptNote)
-        val fallbackOptions = getFallbackOptions(isPolite = isPolite, mode = mode)
 
-        if (currentKey.isBlank()) {
+        if (!isValidApiKey(currentKey)) {
             return@withContext GenerationResult(
-                options = fallbackOptions,
-                engine = "定型文 (※設定画面でAPIキーを保存してください)",
-                errorDetails = "APIキー未設定"
+                options = emptyList(),
+                engine = "⚠️ APIキー未設定",
+                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
             )
         }
 
@@ -297,9 +311,9 @@ class SmartChatAssistant(
         }
 
         GenerationResult(
-            options = fallbackOptions,
-            engine = "定型文 (通信エラー)",
-            errorDetails = modelResult.errorMessage ?: "接続失敗"
+            options = emptyList(),
+            engine = "❌ 通信エラー",
+            errorDetails = modelResult.errorMessage ?: "Gemini APIとの通信に失敗しました"
         )
     }
 
