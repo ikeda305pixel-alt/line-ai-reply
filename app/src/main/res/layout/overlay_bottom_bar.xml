@@ -23,10 +23,10 @@
     <!-- 1. 返信提案 -->
     <Button
         android:id="@+id/btnBarReply"
-        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
         android:layout_width="wrap_content"
         android:layout_height="34dp"
         android:layout_marginEnd="3dp"
+        android:background="@drawable/bg_overlay_btn"
         android:backgroundTint="@color/line_green"
         android:paddingHorizontal="8dp"
         android:text="💬 返信"
@@ -36,10 +36,10 @@
     <!-- 2. 日程調整 -->
     <Button
         android:id="@+id/btnBarSchedule"
-        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
         android:layout_width="wrap_content"
         android:layout_height="34dp"
         android:layout_marginEnd="3dp"
+        android:background="@drawable/bg_overlay_btn"
         android:backgroundTint="#0EA5E9"
         android:paddingHorizontal="8dp"
         android:text="📅 日程"
@@ -49,10 +49,10 @@
     <!-- 3. 話題提案 -->
     <Button
         android:id="@+id/btnBarTopic"
-        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
         android:layout_width="wrap_content"
         android:layout_height="34dp"
         android:layout_marginEnd="3dp"
+        android:background="@drawable/bg_overlay_btn"
         android:backgroundTint="#F59E0B"
         android:paddingHorizontal="8dp"
         android:text="💡 話題"
@@ -62,10 +62,10 @@
     <!-- 4. ムード分析 -->
     <Button
         android:id="@+id/btnBarMood"
-        style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
         android:layout_width="wrap_content"
         android:layout_height="34dp"
         android:layout_marginEnd="4dp"
+        android:background="@drawable/bg_overlay_btn"
         android:backgroundTint="#8B5CF6"
         android:paddingHorizontal="8dp"
         android:text="🔍 分析"

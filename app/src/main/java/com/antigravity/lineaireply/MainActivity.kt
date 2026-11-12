@@ -140,6 +140,10 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            // Ensure bubble switch is enabled when user explicitly starts the bubble
+            prefs.edit().putBoolean("enable_floating_bubble", true).apply()
+            switchFloatingBubble.isChecked = true
+
             if (!isMediaPermissionGranted()) {
                 Toast.makeText(
                     this,
@@ -148,16 +152,24 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
 
-            val serviceIntent = Intent(this, FloatingBubbleService::class.java).apply {
-                action = FloatingBubbleService.ACTION_START
+            try {
+                val serviceIntent = Intent(this, FloatingBubbleService::class.java).apply {
+                    action = FloatingBubbleService.ACTION_START
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                Toast.makeText(this, "🚀 アシスタントを起動しました！画面端の💬または下部バーをタップしてください", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed starting service: ${e.message}", e)
+                Toast.makeText(this, "⚠️ 起動エラー: ${e.message}", Toast.LENGTH_LONG).show()
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-            Toast.makeText(this, "🚀 アシスタントを起動しました！画面端の💬または下部バーをタップしてください", Toast.LENGTH_SHORT).show()
+
             updateUIState()
+            btnStartBubble.postDelayed({ updateUIState() }, 500)
+            btnStartBubble.postDelayed({ updateUIState() }, 1200)
         }
 
         btnStopBubble.setOnClickListener {

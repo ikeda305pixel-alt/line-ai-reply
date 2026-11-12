@@ -63,10 +63,10 @@
 
             <Button
                 android:id="@+id/btnModeReply"
-                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_overlay_btn"
                 android:backgroundTint="@color/line_green"
                 android:paddingHorizontal="10dp"
                 android:text="💬 返信提案"
@@ -75,10 +75,10 @@
 
             <Button
                 android:id="@+id/btnModeSchedule"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
                 android:paddingHorizontal="10dp"
                 android:text="📅 日程調整"
                 android:textColor="@color/text_primary"
@@ -86,10 +86,10 @@
 
             <Button
                 android:id="@+id/btnModeTopic"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
                 android:paddingHorizontal="10dp"
                 android:text="💡 話題提案"
                 android:textColor="@color/text_primary"
@@ -97,9 +97,9 @@
 
             <Button
                 android:id="@+id/btnModeMood"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
+                android:background="@drawable/bg_overlay_btn_outline"
                 android:paddingHorizontal="10dp"
                 android:text="🔍 ムード分析"
                 android:textColor="@color/text_primary"
@@ -193,10 +193,10 @@
 
             <Button
                 android:id="@+id/btnMiniGenerate"
-                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
                 android:layout_marginStart="6dp"
+                android:background="@drawable/bg_overlay_btn"
                 android:backgroundTint="@color/line_green"
                 android:text="🚀 AI生成"
                 android:textColor="@color/white"
@@ -214,50 +214,58 @@
 
         <Button
             android:id="@+id/btnOpt1"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_overlay_btn_outline"
             android:gravity="start|center_vertical"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
             android:text="😊 案1"
             android:textAllCaps="false"
+            android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
         <Button
             android:id="@+id/btnOpt2"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_overlay_btn_outline"
             android:gravity="start|center_vertical"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
             android:text="✨ 案2"
             android:textAllCaps="false"
+            android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
         <Button
             android:id="@+id/btnOpt3"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_overlay_btn_outline"
             android:gravity="start|center_vertical"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
             android:text="😄 案3"
             android:textAllCaps="false"
+            android:textColor="@color/text_primary"
             android:textSize="12sp" />
 
         <Button
             android:id="@+id/btnOpt4"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="6dp"
+            android:background="@drawable/bg_overlay_btn_outline"
             android:gravity="start|center_vertical"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
             android:text="☕ 案4"
             android:textAllCaps="false"
+            android:textColor="@color/text_primary"
             android:textSize="12sp" />
     </LinearLayout>
 
@@ -279,9 +287,9 @@
 
         <Button
             android:id="@+id/btnRegenerate"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
             android:minWidth="0dp"
             android:paddingHorizontal="10dp"
             android:text="🔄 別の案"
@@ -290,9 +298,9 @@
 
         <Button
             android:id="@+id/btnDirectType"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="?android:attr/selectableItemBackground"
             android:minWidth="0dp"
             android:paddingHorizontal="10dp"
             android:text="✍️ メモ入力"

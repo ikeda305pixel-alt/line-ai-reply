@@ -6,7 +6,9 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -23,10 +25,11 @@ import com.antigravity.lineaireply.ai.SmartReplyOption
 
 /**
  * Floating Overlay Manager supporting:
- * 1. Draggable trigger bubble (💬) with edge snapping.
+ * 1. Draggable trigger bubble (💬) with edge snapping (guaranteed on-screen positioning).
  * 2. Draggable bottom action dock bar (💬 返信 / 📅 日程 / 💡 話題 / 🔍 分析).
- * 3. Window Focus trick to bypass Android 10+ background clipboard restriction.
- * 4. Reply options popup card with screenshot/clipboard preview & inline mini input fallback.
+ * 3. Themed context inflation to prevent MaterialComponents theme crashes in Service.
+ * 4. Window Focus trick to bypass Android 10+ background clipboard restriction.
+ * 5. Reply options popup card with screenshot/clipboard preview & inline mini input fallback.
  */
 class SmartOverlayManager(private val context: Context) {
 
@@ -34,6 +37,8 @@ class SmartOverlayManager(private val context: Context) {
         private const val TAG = "SmartOverlayManager"
     }
 
+    private val themedContext: Context = ContextThemeWrapper(context, R.style.Theme_LineAiReply)
+    private val layoutInflater: LayoutInflater = LayoutInflater.from(themedContext)
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     // Floating Trigger Bubble (💬)
@@ -68,14 +73,42 @@ class SmartOverlayManager(private val context: Context) {
         onClick: () -> Unit,
         onClose: (() -> Unit)? = null
     ) {
-        if (bubbleView != null) return
-
-        val inflater = LayoutInflater.from(context)
-        val view = inflater.inflate(R.layout.overlay_bubble_trigger, null)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+            Log.w(TAG, "Cannot show bubble: SYSTEM_ALERT_WINDOW not granted")
+            return
+        }
 
         val displayMetrics = context.resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
+        val density = displayMetrics.density
+
+        // If already attached, ensure visible and re-dock cleanly
+        if (bubbleView != null) {
+            bubbleView?.visibility = View.VISIBLE
+            bubbleParams?.let { p ->
+                val w = bubbleView?.width?.takeIf { it > 0 } ?: (70 * density).toInt()
+                val margin = (16 * density).toInt()
+                p.x = (screenWidth - w - margin).coerceAtLeast(margin)
+                try {
+                    windowManager.updateViewLayout(bubbleView, p)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed updating existing bubble: ${e.message}")
+                }
+            }
+            return
+        }
+
+        val view = try {
+            layoutInflater.inflate(R.layout.overlay_bubble_trigger, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inflating bubble view: ${e.message}", e)
+            return
+        }
+
+        view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val bubbleWidth = if (view.measuredWidth > 0) view.measuredWidth else (70 * density).toInt()
+        val marginEnd = (16 * density).toInt()
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -85,13 +118,14 @@ class SmartOverlayManager(private val context: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screenWidth - 140
-            y = screenHeight / 3
+            // Guaranteed inside the right edge of the screen regardless of device density
+            x = (screenWidth - bubbleWidth - marginEnd).coerceAtLeast(16)
+            y = (screenHeight / 3).coerceAtLeast(100)
         }
 
         bubbleParams = params
         bubbleView = view
-        view.alpha = 0.85f
+        view.alpha = 0.90f
 
         val bubbleIcon = view.findViewById<TextView>(R.id.bubbleIcon)
         if (platform == "Bumble") {
@@ -138,7 +172,7 @@ class SmartOverlayManager(private val context: Context) {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    view.alpha = 0.85f
+                    view.alpha = 0.90f
                     snapToEdge(view, params)
                     if (isClick) {
                         onClick()
@@ -152,7 +186,7 @@ class SmartOverlayManager(private val context: Context) {
         try {
             windowManager.addView(view, params)
         } catch (e: Exception) {
-            Log.e(TAG, "Error adding bubble to WindowManager: ${e.message}")
+            Log.e(TAG, "Error adding bubble to WindowManager: ${e.message}", e)
         }
     }
 
@@ -172,15 +206,24 @@ class SmartOverlayManager(private val context: Context) {
         onModeClick: (AssistantMode) -> Unit,
         onClose: (() -> Unit)? = null
     ) {
-        if (bottomBarView != null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+            Log.w(TAG, "Cannot show bottom bar: SYSTEM_ALERT_WINDOW not granted")
+            return
+        }
 
-        val inflater = LayoutInflater.from(context)
-        val view = inflater.inflate(R.layout.overlay_bottom_bar, null)
+        if (bottomBarView != null) {
+            bottomBarView?.visibility = View.VISIBLE
+            return
+        }
 
-        val displayMetrics = context.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
+        val view = try {
+            layoutInflater.inflate(R.layout.overlay_bottom_bar, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed inflating overlay_bottom_bar: ${e.message}", e)
+            return
+        }
 
+        val density = context.resources.displayMetrics.density
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -189,7 +232,7 @@ class SmartOverlayManager(private val context: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = 120
+            y = (45 * density).toInt()
         }
 
         bottomBarParams = params
@@ -237,7 +280,7 @@ class SmartOverlayManager(private val context: Context) {
         try {
             windowManager.addView(view, params)
         } catch (e: Exception) {
-            Log.e(TAG, "Error adding bottom bar to WindowManager: ${e.message}")
+            Log.e(TAG, "Error adding bottom bar to WindowManager: ${e.message}", e)
         }
     }
 
@@ -253,10 +296,6 @@ class SmartOverlayManager(private val context: Context) {
     // ==========================================
     // 3. Window Focus Trick for Clipboard Reading
     // ==========================================
-    /**
-     * Momentarily clears FLAG_NOT_FOCUSABLE to obtain window focus, reads ClipboardManager,
-     * and promptly restores FLAG_NOT_FOCUSABLE.
-     */
     fun readClipboardWithFocusTrick(targetView: View?, onResult: (String?) -> Unit) {
         val v = targetView ?: bubbleView ?: bottomBarView ?: cardView
         if (v == null) {
@@ -350,30 +389,35 @@ class SmartOverlayManager(private val context: Context) {
         onMiniPromptSubmit: ((String) -> Unit)? = null,
         onDismiss: (() -> Unit)? = null
     ) {
-        // Hide trigger bubble while modal is active
+        // Temporarily hide trigger bubble and bottom bar while modal is active
         hideBubble()
+        hideBottomBar()
 
         if (cardView == null) {
-            val inflater = LayoutInflater.from(context)
-            val view = inflater.inflate(R.layout.overlay_line_replies, null)
+            val view = try {
+                layoutInflater.inflate(R.layout.overlay_line_replies, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed inflating overlay_line_replies: ${e.message}", e)
+                return
+            }
 
+            val density = context.resources.displayMetrics.density
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 getOverlayLayoutType(),
-                // Start without NOT_FOCUSABLE so EditText can accept input if needed
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                y = 60
+                y = (40 * density).toInt()
             }
 
             cardView = view
             try {
                 windowManager.addView(view, params)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed adding replies card: ${e.message}")
+                Log.e(TAG, "Failed adding replies card: ${e.message}", e)
                 return
             }
         }
@@ -443,49 +487,41 @@ class SmartOverlayManager(private val context: Context) {
             tvClipboard?.visibility = View.GONE
         }
 
-        // 6. Mini Input Box (visible when neither screenshot nor clipboard and options empty, unless alert shown)
+        // 6. Mini Input Box
         val layoutMini = v.findViewById<LinearLayout>(R.id.layoutMiniInput)
         val editMini = v.findViewById<EditText>(R.id.editMiniPrompt)
         val btnMini = v.findViewById<Button>(R.id.btnMiniGenerate)
 
-        val needsMiniInput = alertMessage.isNullOrBlank() && screenshotName.isNullOrBlank() && clipboardText.isNullOrBlank() && options.isEmpty()
-        layoutMini?.visibility = if (needsMiniInput) View.VISIBLE else View.GONE
-
         btnMini?.setOnClickListener {
-            val text = editMini?.text?.toString()?.trim() ?: ""
-            if (text.isNotBlank()) {
-                onMiniPromptSubmit?.invoke(text)
+            val note = editMini?.text?.toString()?.trim()
+            if (!note.isNullOrBlank()) {
+                onMiniPromptSubmit?.invoke(note)
             } else {
-                Toast.makeText(context, "一言メモまたはキーワードを入力してください", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "メモを入力してください", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // 7. Options Layout (hidden if alert is showing)
-        val optionsLayout = v.findViewById<LinearLayout>(R.id.optionsLayout)
-        if (!alertMessage.isNullOrBlank()) {
-            optionsLayout?.visibility = View.GONE
-        } else {
-            optionsLayout?.visibility = View.VISIBLE
-        }
+        val showMiniInput = options.isEmpty() && alertMessage.isNullOrBlank()
+        layoutMini?.visibility = if (showMiniInput) View.VISIBLE else View.GONE
 
-        // 6. 4 Selectable Reply Options
-        val btnList = listOf(
+        // 7. 4 Reply Options Buttons
+        val btnOpts = listOf(
             v.findViewById<Button>(R.id.btnOpt1),
             v.findViewById<Button>(R.id.btnOpt2),
             v.findViewById<Button>(R.id.btnOpt3),
             v.findViewById<Button>(R.id.btnOpt4)
         )
 
-        for (i in btnList.indices) {
-            val btn = btnList[i]
+        for (i in btnOpts.indices) {
+            val btn = btnOpts[i]
             if (i < options.size) {
                 val opt = options[i]
                 btn.visibility = View.VISIBLE
-                btn.text = "${opt.label}\n${opt.text}"
+                btn.text = "${opt.label}: ${opt.text}"
                 btn.setOnClickListener {
                     copyToClipboard(opt.text)
-                    hideReplies()
                     onSelect(opt.text)
+                    hideReplies()
                     onDismiss?.invoke()
                 }
             } else {
@@ -493,14 +529,13 @@ class SmartOverlayManager(private val context: Context) {
             }
         }
 
-        // 7. Bottom Action Controls
+        // Dismiss action
         v.findViewById<View>(R.id.btnClose).setOnClickListener {
             hideReplies()
             onDismiss?.invoke()
         }
 
         v.findViewById<View>(R.id.btnDirectType).setOnClickListener {
-            // Toggle mini input box
             if (layoutMini?.visibility == View.VISIBLE) {
                 layoutMini.visibility = View.GONE
             } else {
@@ -524,12 +559,15 @@ class SmartOverlayManager(private val context: Context) {
     }
 
     fun snapToEdge(view: View, params: WindowManager.LayoutParams) {
-        val screenWidth = context.resources.displayMetrics.widthPixels
-        val currentWidth = view.width.coerceAtLeast(120)
+        val displayMetrics = context.resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val density = displayMetrics.density
+        val currentWidth = if (view.width > 0) view.width else (70 * density).toInt()
+        val margin = (16 * density).toInt()
         if (params.x + currentWidth / 2 < screenWidth / 2) {
-            params.x = 24
+            params.x = margin
         } else {
-            params.x = screenWidth - currentWidth - 24
+            params.x = (screenWidth - currentWidth - margin).coerceAtLeast(margin)
         }
         try {
             windowManager.updateViewLayout(view, params)
