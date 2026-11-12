@@ -200,6 +200,7 @@ class MainActivity : AppCompatActivity() {
                 btnTestApiKey.text = "🔑 APIキーの通信テスト"
 
                 if (success) {
+                    updateUIState()
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("✅ 通信成功！")
                         .setMessage(details)
@@ -297,9 +298,14 @@ class MainActivity : AppCompatActivity() {
             tvBubbleStatus.setTextColor(0xFF374151.toInt())
         }
 
-        // Usage count
+        // Usage count & active model
         val count = guard.getDailyUsage()
-        textFreeTierStatus.text = getString(R.string.status_free_tier, count)
+        val activeModel = SmartChatAssistant.cachedWorkingModel
+        if (activeModel != null) {
+            textFreeTierStatus.text = "${getString(R.string.status_free_tier, count)}\n⚡ 稼働中モデル: $activeModel (マルチモーダル直行・HTTP 200実測済)"
+        } else {
+            textFreeTierStatus.text = getString(R.string.status_free_tier, count)
+        }
 
         // User style summary
         val style = memoryManager.getUserStyle()

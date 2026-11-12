@@ -243,6 +243,7 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         }
 
         var lastError = ""
+        val startTime = System.currentTimeMillis()
         for (rawModel in modelsToTry) {
             val model = rawModel.removePrefix("models/")
             try {
@@ -256,7 +257,9 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     .post(body.toString().toRequestBody(mediaType))
                     .build()
 
+                val callStart = System.currentTimeMillis()
                 val resp = client.newCall(req).execute()
+                val callLatency = System.currentTimeMillis() - callStart
                 val code = resp.code
                 val respBody = resp.body?.string() ?: ""
 
@@ -264,7 +267,7 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     cachedWorkingModel = model
                     return@withContext Pair(
                         true,
-                        "✅ Gemini API通信成功！(HTTP $code)\n\n【利用モデル】$model\n\n最新モデルとの接続が確認できました。LINEおよびBumbleで高精度なAI返信が利用可能です。"
+                        "✅ Gemini API通信成功！(HTTP $code / ${callLatency}ms)\n\n【利用モデル】$model\n\n最新モデルとの超高速接続が確認できました。LINEおよびBumbleで高精度なAI返信が利用可能です。"
                     )
                 } else {
                     val friendlyMsg = when (code) {
@@ -275,6 +278,10 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                         else -> "HTTP $code エラー: $respBody"
                     }
                     lastError = friendlyMsg
+                    // Circuit breaker: Non-retryable key or auth errors should fail immediately rather than looping through all models
+                    if (code == 400 || code == 403) {
+                        break
+                    }
                 }
             } catch (e: Exception) {
                 lastError = "通信例外 ($model): ${e.message}"

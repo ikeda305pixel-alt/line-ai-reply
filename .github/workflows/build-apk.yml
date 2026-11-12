@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.0.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.1.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,35 +46,21 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0
-          name: LINE & Bumble AI Reply Assistant v2.0.0 (5大専門チーム合同監査・品質大刷新メジャーアップデート)
+          tag_name: v2.0.1
+          name: LINE & Bumble AI Reply Assistant v2.0.1 (4層6役App専任スクワッド適用・レイテンシ実測＆モード解説搭載)
           body: |
-            ## LINE & Bumble AI返信アシスタント v2.0.0 (Major Release)
+            ## LINE & Bumble AI返信アシスタント v2.0.1 (App Squad Edition)
 
-            ### 🚀 1. 【5大専門チーム（司令塔・UI・機能・レビュー・検品）合同監査による品質大刷新】
-            - **Google Modern Android Development (MAD) ＆ 御作法準拠**: ライフサイクル安全、構造化並行処理、OOM防御を完全網羅。
-
-            ### 📱 2. 【UI/UX・人間工学の劇的進化】
-            - **ドラッグハンドルの操作性向上**: ハンドル幅を32dpへ拡大し、左右セーフティマージンを確保して誤タップを防止。
-            - **触覚フィードバック（Haptics）＆ 視覚確認**: 返信文タップ時に「コツッ」という触覚振動と「✓ コピー完了！」のアニメーションを表示。ペースト操作への圧倒的な手応えと安心感を提供。
-            - **アクションバータッチターゲット適正化**: 48dpアクセシビリティ基準に沿ってボタン高さを34dpへ拡大。
-
-            ### 🛠️ 3. 【機能・内部ロジックの堅牢化＆トークン50%削減】
-            - **Gemini Vision 画像トークン半減（768px最適化）**: 1024pxからLINE文字認識の最適解768px（Gemini 1タイル=258トークン）へリサイズし、課金とレイテンシを半減。
-            - **OOM完全防御＆Bitmap確実解放**: `Throwable` 捕捉によるOutOfMemoryErrorクラッシュ防止と、`finally` ブロックでの確実なネイティブメモリ解放。
-            - **通信サーキットブレーカー**: 400/403などの非再試行エラー時に、無駄な8モデル空転ループを即時中断してユーザーへ親切案内。
-            - **OkHttpClient 接続プール共有**: タイムアウト（Connect: 8s, Read: 25s, Write: 20s）を一元管理。
-
-            ### 🧐 4. 【シニアピアレビューによる潜在バグ・メモリリーク根絶】
-            - **ServiceScope キャンセル保証**: サービス破棄時のコルーチンキャンセルを実装し、破棄済みWindowManagerへの不正アクセスやメモリリークを完全解消。
-            - **FocusListener 解除保証**: クリップボード取得タイムアウト時のリスナーリークを防止。
-            - **デッドコード・二重キャッシュの一元化**: 稼働中モデルキャッシュを `DynamicModelRouterPlugin` に一本化。
+            ### 🏗️ 1. 【4層6役App専任スクワッド（PM・UI/UX・Core・Subsystem・Reviewer・QA）適用】
+            - **アプリ内4大AIモード解説カード追加**: 返信・日程・話題・分析の各モードの役割とプロンプト方針をアプリ内で一目で把握可能に。
+            - **稼働中モデル＆実測レイテンシ可視化**: 通信テスト時に応答ミリ秒（例: 742ms）を表示し、アクティブなGeminiモデルをUIに常時表示。
+            - **通信サーキットブレーカー完全適用**: APIキー不正（400/403）時に無駄なモデルループを即時中断し、0.5秒でエラー原因を親切案内。
 
             ### 🔒 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v2.0.0.apk
+            app/build/outputs/apk/release/line-ai-reply-v2.0.1.apk
 
           make_latest: true
         env:
