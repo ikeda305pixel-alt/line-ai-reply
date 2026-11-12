@@ -147,7 +147,7 @@ class FloatingBubbleService : Service() {
                     currentMode = mode,
                     screenshotName = null,
                     clipboardText = null,
-                    alertMessage = "⚠️ 設定画面でGemini APIキー（AIzaSy...）を保存してください",
+                    alertMessage = "⚠️ 設定画面でGemini APIキー（AIza... または AQ....）を保存してください",
                     options = emptyList(),
                     onModeSelected = { newMode ->
                         currentMode = newMode

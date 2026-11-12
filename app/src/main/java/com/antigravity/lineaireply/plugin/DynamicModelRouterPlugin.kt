@@ -25,15 +25,16 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         const val TAG = "DynamicModelRouter"
 
         val CANDIDATE_MODELS = listOf(
+            "gemini-3-flash-preview",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemma-4-26b-a4b-it",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
             "gemini-2.0-flash",
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash-8b",
-            "gemini-1.5-pro",
-            "gemini-pro"
+            "gemini-1.5-flash"
         )
 
         @Volatile
@@ -68,7 +69,11 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                 .readTimeout(8, TimeUnit.SECONDS)
                 .build()
             val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey"
-            val req = Request.Builder().url(url).get().build()
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("x-goog-api-key", cleanKey)
+                .get()
+                .build()
             val resp = listClient.newCall(req).execute()
             if (resp.isSuccessful) {
                 val body = resp.body?.string() ?: ""
@@ -93,16 +98,21 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     }
                 }
 
-                // Sort: prioritize 2.5-flash > 2.0-flash > flash-lite > 1.5-flash > flash > pro
+                // Sort: prioritize 3-flash-preview > 3.8-flash > 3.5-flash > flash-latest > gemma > 2.5-flash
                 result.sortWith { a, b ->
                     fun score(m: String): Int = when {
-                        m.contains("2.5-flash") && !m.contains("lite") -> 100
-                        m.contains("2.0-flash") -> 90
-                        m.contains("2.5-flash-lite") -> 85
-                        m.contains("flash-lite") -> 80
-                        m.contains("1.5-flash") -> 70
-                        m.contains("flash") -> 60
-                        m.contains("pro") -> 50
+                        m.contains("3-flash-preview") -> 120
+                        m.contains("3.8-flash") -> 115
+                        m.contains("3.5-flash") -> 110
+                        m.contains("flash-latest") -> 105
+                        m.contains("3.1-flash") -> 100
+                        m.contains("gemma-4-26b") -> 95
+                        m.contains("2.5-flash") && !m.contains("lite") -> 85
+                        m.contains("2.0-flash") -> 75
+                        m.contains("flash-lite") -> 70
+                        m.contains("1.5-flash") -> 60
+                        m.contains("flash") -> 50
+                        m.contains("pro") -> 40
                         else -> 10
                     }
                     score(b) - score(a)
@@ -166,6 +176,7 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
 
                 val req = Request.Builder()
                     .url(endpoint)
+                    .addHeader("x-goog-api-key", cleanKey)
                     .post(body.toString().toRequestBody(mediaType))
                     .build()
 

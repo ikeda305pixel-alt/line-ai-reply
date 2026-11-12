@@ -43,22 +43,26 @@ class SmartChatAssistant(
         var cachedWorkingModel: String? = null
 
         val FALLBACK_CANDIDATE_MODELS = listOf(
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-3-flash-preview",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemma-4-26b-a4b-it",
+            "gemini-flash-latest",
+            "gemini-2.5-flash"
         )
 
         fun sanitizeApiKey(rawKey: String): String = DynamicModelRouterPlugin.sanitizeKey(rawKey)
 
         fun isValidApiKey(rawKey: String): Boolean {
             val clean = sanitizeApiKey(rawKey)
-            return clean.startsWith("AIzaSy") && clean.length >= 25
+            // Supports both legacy 'AIza...' Traffic keys and modern Google AI Studio 'AQ....' Authentication keys
+            return (clean.startsWith("AIza") || clean.startsWith("AQ.") || clean.length >= 25) && clean.length >= 20
         }
 
         suspend fun testApiKey(apiKey: String): Pair<Boolean, String> {
             val cleanKey = sanitizeApiKey(apiKey)
             if (!isValidApiKey(cleanKey)) {
-                return Pair(false, "Gemini APIキーは「AIzaSy」から始まる文字列を入力してください。")
+                return Pair(false, "Gemini APIキーを入力してください。\n（AIza... または Google AI Studio 最新形式の AQ....）")
             }
             val router = DynamicModelRouterPlugin()
             val result = router.generateContent(
@@ -101,7 +105,7 @@ class SmartChatAssistant(
             return@withContext GenerationResult(
                 options = emptyList(),
                 engine = "⚠️ APIキー未設定",
-                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
+                errorDetails = "設定画面でGemini APIキー（AIza... または AQ....）を保存してください"
             )
         }
 
@@ -161,7 +165,7 @@ class SmartChatAssistant(
             return@withContext GenerationResult(
                 options = emptyList(),
                 engine = "⚠️ APIキー未設定",
-                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
+                errorDetails = "設定画面でGemini APIキー（AIza... または AQ....）を保存してください"
             )
         }
 
@@ -219,7 +223,7 @@ class SmartChatAssistant(
             return@withContext GenerationResult(
                 options = emptyList(),
                 engine = "⚠️ APIキー未設定",
-                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
+                errorDetails = "設定画面でGemini APIキー（AIza... または AQ....）を保存してください"
             )
         }
 
@@ -279,7 +283,7 @@ class SmartChatAssistant(
             return@withContext GenerationResult(
                 options = emptyList(),
                 engine = "⚠️ APIキー未設定",
-                errorDetails = "設定画面でGemini APIキー（AIzaSy...）を保存してください"
+                errorDetails = "設定画面でGemini APIキー（AIza... または AQ....）を保存してください"
             )
         }
 

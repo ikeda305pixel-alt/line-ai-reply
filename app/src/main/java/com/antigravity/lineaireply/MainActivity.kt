@@ -215,10 +215,11 @@ class MainActivity : AppCompatActivity() {
             val cleanKey = SmartChatAssistant.sanitizeApiKey(rawKey)
             editKey.setText(cleanKey)
 
-            if (cleanKey.isNotBlank() && !cleanKey.startsWith("AIzaSy")) {
+            val isStandardKey = cleanKey.startsWith("AIza") || cleanKey.startsWith("AQ.")
+            if (cleanKey.isNotBlank() && (!isStandardKey || cleanKey.length < 20)) {
                 AlertDialog.Builder(this)
                     .setTitle("⚠️ APIキーの確認")
-                    .setMessage("入力されたキーは 'AIzaSy' から始まっていません。\n\nGoogle AI Studio (aistudio.google.com) で取得したGemini APIキーであることをご確認ください。\n\nこのまま保存しますか？")
+                    .setMessage("入力されたキーは 'AIza...' または Google AI Studio 最新形式の 'AQ....' と異なる形式です。\n\nGoogle AI Studio (aistudio.google.com) で取得したGemini APIキーであることをご確認ください。\n\nこのまま保存しますか？")
                     .setPositiveButton("保存する") { _, _ ->
                         prefs.edit().putString("gemini_key", cleanKey).apply()
                         Toast.makeText(this, "APIキーを保存しました ✅", Toast.LENGTH_SHORT).show()
