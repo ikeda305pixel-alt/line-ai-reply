@@ -30,7 +30,9 @@ data class ChatContext(
     val userMessageCount: Int,
     val isPartnerPhotoRecent: Boolean = false,
     val isPartnerPolite: Boolean = false
-)
+) {
+    val isBumble: Boolean get() = platform.equals("Bumble", ignoreCase = true)
+}
 
 /**
  * Spatial conversation & profile extractor for LINE and Bumble.

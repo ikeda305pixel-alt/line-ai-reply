@@ -78,7 +78,7 @@ class SmartChatAssistant(
             sampleQuotes = emptyList(),
             totalLearnedCount = 0
         )
-        val shouldInvite = forceLineInvite || context.isBumble
+        val shouldInvite = forceLineInvite || context.isBumble || context.shouldSuggestLineInvite
         val partnerDossier = memoryManager?.getPartnerDossier(context.partnerName) ?: PartnerDossier(
             name = context.partnerName.ifEmpty { "相手" },
             location = "不明",
