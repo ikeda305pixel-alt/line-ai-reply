@@ -121,12 +121,29 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
+    <!-- Target Message Banner (Showing recognized partner message) -->
+    <TextView
+        android:id="@+id/textTargetMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="#EFF6FF"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="5dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="🎯 返信対象: 「相手の最新メッセージ」"
+        android:textColor="#1D4ED8"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <!-- Screenshot Priority Banner -->
     <TextView
         android:id="@+id/textScreenshotPreview"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
         android:background="#ECFDF5"
         android:paddingHorizontal="10dp"
         android:paddingVertical="4dp"

@@ -25,16 +25,12 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         const val TAG = "DynamicModelRouter"
 
         val CANDIDATE_MODELS = listOf(
-            "gemini-3-flash-preview",
-            "gemini-3.8-flash",
-            "gemini-3.5-flash",
-            "gemini-3.1-flash-lite",
-            "gemma-4-26b-a4b-it",
-            "gemini-flash-latest",
-            "gemini-flash-lite-latest",
             "gemini-2.5-flash",
             "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-1.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-3-flash-preview"
         )
 
         @Volatile
@@ -54,8 +50,8 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
     private val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -139,17 +135,12 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
             return@withContext ModelResult(false, "", "", "APIキーが入力されていません")
         }
 
-        val discovered = if (cachedWorkingModel != null) {
+        val modelsToTry = if (preferredModel != null) {
+            listOf(preferredModel) + CANDIDATE_MODELS
+        } else if (cachedWorkingModel != null) {
             listOf(cachedWorkingModel!!) + CANDIDATE_MODELS
         } else {
-            val list = fetchAvailableModels(cleanKey)
-            if (list.isNotEmpty()) list + CANDIDATE_MODELS else CANDIDATE_MODELS
-        }.distinct()
-
-        val modelsToTry = if (preferredModel != null) {
-            listOf(preferredModel) + discovered
-        } else {
-            discovered
+            CANDIDATE_MODELS
         }.distinct()
 
         var lastError = ""

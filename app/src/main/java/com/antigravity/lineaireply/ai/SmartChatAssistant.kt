@@ -7,6 +7,7 @@ import com.antigravity.lineaireply.plugin.IPersonaSynthesizerPlugin
 import com.antigravity.lineaireply.plugin.PersonaSynthesizerPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 data class SmartReplyOption(
     val label: String,
@@ -16,7 +17,8 @@ data class SmartReplyOption(
 data class GenerationResult(
     val options: List<SmartReplyOption>,
     val engine: String,
-    val errorDetails: String? = null
+    val errorDetails: String? = null,
+    val targetMessage: String? = null
 )
 
 /**
@@ -188,13 +190,15 @@ class SmartChatAssistant(
 
         if (modelResult.success && modelResult.responseText.isNotBlank()) {
             val options = synthesizer.parseReplies(modelResult.responseText)
+            val recognizedTarget = extractTargetMessage(modelResult.responseText)
             if (options.isNotEmpty()) {
                 guard.recordRequest()
                 cachedWorkingModel = modelResult.modelName
                 return@withContext GenerationResult(
                     options = options.take(4),
                     engine = "Gemini Vision (${modelResult.modelName})",
-                    errorDetails = null
+                    errorDetails = null,
+                    targetMessage = recognizedTarget
                 )
             } else {
                 Log.w(TAG, "Empty parse from Gemini Vision output: ${modelResult.responseText.take(60)}")
@@ -326,6 +330,24 @@ class SmartChatAssistant(
         return text.isNotBlank() && politeRegex.containsMatchIn(text)
     }
 
+    private fun extractTargetMessage(responseText: String): String? {
+        return try {
+            var clean = responseText.trim()
+            if (clean.startsWith("```")) {
+                val firstNl = clean.indexOf('\n')
+                if (firstNl != -1) clean = clean.substring(firstNl + 1)
+                if (clean.endsWith("```")) clean = clean.substring(0, clean.length - 3)
+                clean = clean.trim()
+            }
+            if (clean.startsWith("{")) {
+                val json = JSONObject(clean)
+                json.optString("targetMessage", "").takeIf { it.isNotBlank() }
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun buildPromptForVision(mode: AssistantMode, userPromptNote: String?): String {
         val modeInstruction = getModeInstruction(mode)
         val noteSection = if (!userPromptNote.isNullOrBlank()) {
@@ -335,31 +357,37 @@ class SmartChatAssistant(
         return """
             あなたは添付されたLINEトークのスクリーンショット画像を直接読み取って支援する最高峰のAIコミュ力アシスタントです。
 
-            【指示】
-            添付されたスクリーンショット画像を直接視覚解析してください：
-            1. 相手の直近のメッセージ、相手の名前、会話の文脈を把握してください。
-            2. 相手が敬語（です・ます調）か、フランクなタメ口かを厳密に判定してください。
-            3. 画像内に相手から送信された写真（料理、ペット、風景など）がある場合は、その内容を認識してください。
+            【LINEトーク画面の構造と最新メッセージの特定（最重要ルール）】
+            LINEトーク画面は、上から下へと時系列順に並んでいます：
+            1. 【過去メッセージ（上部・中央）は絶対に無視】:
+               画面の上部や中央にある吹き出しはすべて「過去のやり取り」です。これらに返信すると会話が噛み合わなくなります。絶対に画面上部・中央のメッセージに返信しないでください！
+            2. 【最下部の最新メッセージに返信】:
+               返信すべき対象は、**画面の一番下（最下部・文字入力欄のすぐ上）にあるメッセージ**です。
+            3. 【相手の吹き出しと自分の吹き出しの識別】:
+               - 【左側の白い吹き出し】: 相手（パートナー）が送信したメッセージです。
+               - 【右側の緑色の吹き出し】: ユーザー（自分）が送信したメッセージです。
+               ※必ず**画面の最下部にある「相手の最新メッセージ」（左側の白い吹き出し）を返信対象**として特定してください。
+            4. 【相手のトーンと敬語の完全同期】:
+               相手が敬語（です・ます調）なら、必ず全返信案を丁寧語（です・ます調）で統一してください。タメ口なら自然なタメ口で返してください。
+            5. 【デート・待ち合わせ場所の厳守】:
+               場所や店を提案する場合は、絶対に東京（渋谷・新宿等）を出さず、必ず神奈川県内（厚木、本厚木、海老名、茅ヶ崎、辻堂、藤沢、湘南、横浜）のエリアを提案してください。
+            6. 【写真へのリアクション】:
+               相手が写真を送信している場合は、その写真の内容（料理、風景、ペットなど）に自然に触れてください。
 
             $noteSection
             $modeInstruction
 
-            【最重要ルール】
-            1. 【敬語・トーンの完全同期】:
-               相手が敬語・丁寧語で話している場合は、必ずすべての返信案を好印象で親しみやすい丁寧語（です・ます調）で統一してください。タメ口は厳禁です！相手がフランクなタメ口なら等身大のフランクな口調で返してください。
-            2. 【デート・待ち合わせ場所の厳守】:
-               場所や店を提案する場合は、絶対に東京（渋谷・新宿・六本木等）を出さず、必ず神奈川県内（厚木、本厚木、海老名、茅ヶ崎、辻堂、藤沢、湘南、横浜）のエリアを提案してください。
-            3. 【写真リアクション】:
-               相手が写真を送ってきている場合は、その写真の内容（美味しそうなパスタ、可愛い犬など）に自然に触れてリアクションしてください。
-
-            【出力フォーマット】
-            Markdownコードブロックや余計な解説は一切出力せず、必ず以下のJSON配列形式のみを出力してください：
-            [
-              {"label": "ラベル1", "text": "返信文1"},
-              {"label": "ラベル2", "text": "返信文2"},
-              {"label": "ラベル3", "text": "返信文3"},
-              {"label": "ラベル4", "text": "返信文4"}
-            ]
+            【出力フォーマット（必ず以下のJSON形式のみを出力）】
+            Markdownコードブロックや余計な解説は一切出力せず、必ず以下のJSONオブジェクト形式のみを出力してください：
+            {
+              "targetMessage": "画面最下部で認識した相手の最新メッセージ本文（例: 「今週の金曜空いてる？」）",
+              "options": [
+                {"label": "🎯 即答", "text": "返信案1"},
+                {"label": "😄 共感・ざっくばらん", "text": "返信案2"},
+                {"label": "💬 質問", "text": "返信案3"},
+                {"label": "📅 日程調整", "text": "返信案4"}
+              ]
+            }
         """.trimIndent()
     }
 

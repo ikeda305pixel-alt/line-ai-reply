@@ -47,7 +47,11 @@ object ScreenshotDetectionHelper {
      * Finds the most recent screenshot taken within [maxAgeSeconds] (default: 20s).
      * Returns ScreenshotInfo with Base64 JPEG if found, or null if none found within the time window.
      */
-    fun getRecentScreenshot(context: Context, maxAgeSeconds: Long = 20): ScreenshotInfo? {
+    fun getRecentScreenshot(
+        context: Context,
+        maxAgeSeconds: Long = 60,
+        isRetry: Boolean = false
+    ): ScreenshotInfo? {
         val nowSeconds = System.currentTimeMillis() / 1000
 
         val projectionList = mutableListOf(
@@ -92,17 +96,23 @@ object ScreenshotDetectionHelper {
                     val relPath = if (pathCol != -1) c.getString(pathCol) else null
                     val isPending = if (pendingCol != -1) c.getInt(pendingCol) else 0
 
-                    // 1. Must not be currently pending / written (IS_PENDING == 0)
-                    if (isPending != 0) continue
+                    // 1. If the latest screenshot is still being written by OS, wait briefly and retry once
+                    if (isPending != 0) {
+                        if (checkedCount == 1 && !isRetry) {
+                            try { Thread.sleep(300) } catch (_: Exception) {}
+                            return getRecentScreenshot(context, maxAgeSeconds, isRetry = true)
+                        }
+                        continue
+                    }
 
                     // 2. Must match screenshot naming/folder conventions
                     if (!isScreenshot(name, relPath)) continue
 
-                    // 3. Verify screenshot age is within 20 seconds
+                    // 3. Verify screenshot age is within window (tolerant of clock skew up to -5s)
                     val age = nowSeconds - dateAdded
-                    if (age in 0..maxAgeSeconds) {
+                    if (age >= -5 && age <= maxAgeSeconds) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 1280)
+                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 1024, quality = 75)
                         if (base64 != null) {
                             Log.i(TAG, "Recent screenshot detected: $name in $relPath (age: ${age}s)")
                             return ScreenshotInfo(uri, name, dateAdded, base64)
@@ -118,13 +128,13 @@ object ScreenshotDetectionHelper {
     }
 
     /**
-     * Downscales the screenshot image to at most 1280px and compresses to Base64 JPEG.
+     * Downscales the screenshot image to at most 1024px and compresses to fast Base64 JPEG.
      */
     fun loadAndEncodeScreenshot(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 1280,
-        quality: Int = 80
+        maxDimension: Int = 1024,
+        quality: Int = 75
     ): String? {
         return try {
             // 1. Decode bounds
@@ -202,8 +212,8 @@ object ScreenshotDetectionHelper {
 
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
-            // Query latest screenshot (within last 20s)
-            val info = getRecentScreenshot(context, maxAgeSeconds = 20)
+            // Query latest screenshot (within last 60s)
+            val info = getRecentScreenshot(context, maxAgeSeconds = 60)
             if (info != null && info.uri != lastDetectedUri) {
                 lastDetectedUri = info.uri
                 onNewScreenshot(info)

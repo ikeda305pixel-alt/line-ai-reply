@@ -223,7 +223,10 @@ class SmartOverlayManager(private val context: Context) {
             return
         }
 
-        val density = context.resources.displayMetrics.density
+        val displayMetrics = context.resources.displayMetrics
+        val density = displayMetrics.density
+        val screenHeight = displayMetrics.heightPixels
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -231,8 +234,9 @@ class SmartOverlayManager(private val context: Context) {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = (45 * density).toInt()
+            // Positioned at TOP by default, below status bar, completely out of the way of LINE's keyboard & input field!
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (65 * density).toInt()
         }
 
         bottomBarParams = params
@@ -242,6 +246,23 @@ class SmartOverlayManager(private val context: Context) {
         view.findViewById<Button>(R.id.btnBarSchedule)?.setOnClickListener { onModeClick(AssistantMode.SCHEDULE) }
         view.findViewById<Button>(R.id.btnBarTopic)?.setOnClickListener { onModeClick(AssistantMode.TOPIC) }
         view.findViewById<Button>(R.id.btnBarMood)?.setOnClickListener { onModeClick(AssistantMode.MOOD) }
+
+        // Minimize / Expand toggle
+        val layoutActions = view.findViewById<View>(R.id.layoutBarActions)
+        val btnMinimize = view.findViewById<TextView>(R.id.btnBarMinimize)
+        btnMinimize?.setOnClickListener {
+            val isCurrentlyVisible = layoutActions?.visibility == View.VISIBLE
+            if (isCurrentlyVisible) {
+                layoutActions?.visibility = View.GONE
+                btnMinimize.text = "▶"
+            } else {
+                layoutActions?.visibility = View.VISIBLE
+                btnMinimize.text = "◀"
+            }
+            try {
+                windowManager.updateViewLayout(view, params)
+            } catch (_: Exception) {}
+        }
 
         view.findViewById<View>(R.id.btnBarClose)?.setOnClickListener {
             hideBottomBar()
@@ -265,9 +286,9 @@ class SmartOverlayManager(private val context: Context) {
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - touchDownX).toInt()
-                    val dy = (touchDownY - event.rawY).toInt() // invert for bottom gravity
+                    val dy = (event.rawY - touchDownY).toInt() // Standard downwards from TOP
                     params.x = initialX + dx
-                    params.y = (initialY + dy).coerceAtLeast(30)
+                    params.y = (initialY + dy).coerceIn((35 * density).toInt(), (screenHeight - 120 * density).toInt())
                     try {
                         windowManager.updateViewLayout(view, params)
                     } catch (_: Exception) {}
@@ -379,6 +400,7 @@ class SmartOverlayManager(private val context: Context) {
         platform: String = "LINE",
         summaryText: String,
         currentMode: AssistantMode = AssistantMode.REPLY,
+        targetMessage: String? = null,
         screenshotName: String? = null,
         clipboardText: String? = null,
         alertMessage: String? = null,
@@ -466,6 +488,15 @@ class SmartOverlayManager(private val context: Context) {
             tvAlert?.text = alertMessage
         } else {
             tvAlert?.visibility = View.GONE
+        }
+
+        // 3.5 Target Message Banner (Recognized latest partner message)
+        val tvTarget = v.findViewById<TextView>(R.id.textTargetMessage)
+        if (!targetMessage.isNullOrBlank()) {
+            tvTarget?.visibility = View.VISIBLE
+            tvTarget?.text = "🎯 返信対象: 「$targetMessage」"
+        } else {
+            tvTarget?.visibility = View.GONE
         }
 
         // 4. Screenshot Preview Banner

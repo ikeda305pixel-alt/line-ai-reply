@@ -183,8 +183,8 @@ class FloatingBubbleService : Service() {
                 return@launch
             }
 
-            // Step 1: Check for recent screenshot within 20 seconds
-            val recentScreenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 20)
+            // Step 1: Check for recent screenshot within 60 seconds (with clock skew & pending tolerance)
+            val recentScreenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 60)
 
             if (recentScreenshot != null) {
                 lastScreenshotBase64 = recentScreenshot.base64Jpeg
@@ -196,6 +196,7 @@ class FloatingBubbleService : Service() {
                     platform = "LINE",
                     summaryText = "📷 スクショを解析中...",
                     currentMode = mode,
+                    targetMessage = null,
                     screenshotName = recentScreenshot.displayName,
                     clipboardText = null,
                     alertMessage = null,
@@ -207,7 +208,7 @@ class FloatingBubbleService : Service() {
                     onSelect = {},
                     onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
                     onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays() }
+                    onDismiss = { restoreOverlays(1200L) }
                 )
 
                 val result = assistant.generateFromScreenshot(
@@ -228,6 +229,7 @@ class FloatingBubbleService : Service() {
                     platform = "LINE",
                     summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
                     currentMode = mode,
+                    targetMessage = result.targetMessage,
                     screenshotName = recentScreenshot.displayName,
                     clipboardText = null,
                     alertMessage = alertMsg,
@@ -239,7 +241,7 @@ class FloatingBubbleService : Service() {
                     onSelect = {},
                     onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
                     onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays() }
+                    onDismiss = { restoreOverlays(1200L) }
                 )
                 return@launch
             }
@@ -295,7 +297,7 @@ class FloatingBubbleService : Service() {
                             onSelect = {},
                             onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
                             onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays() }
+                            onDismiss = { restoreOverlays(1200L) }
                         )
                     } else if (!customUserPrompt.isNullOrBlank()) {
                         // User typed directly into mini input
@@ -314,7 +316,7 @@ class FloatingBubbleService : Service() {
                             onSelect = {},
                             onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
                             onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays() }
+                            onDismiss = { restoreOverlays(1200L) }
                         )
 
                         val result = assistant.generateFromUserNote(
@@ -340,7 +342,7 @@ class FloatingBubbleService : Service() {
                             onSelect = {},
                             onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
                             onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays() }
+                            onDismiss = { restoreOverlays(1200L) }
                         )
                     } else {
                         // Step 3: Neither screenshot nor clipboard found -> Show mini input field
@@ -359,7 +361,7 @@ class FloatingBubbleService : Service() {
                             onSelect = {},
                             onRegenerate = { handleActionTrigger(mode) },
                             onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays() }
+                            onDismiss = { restoreOverlays(1200L) }
                         )
                     }
                 }
@@ -367,23 +369,28 @@ class FloatingBubbleService : Service() {
         }
     }
 
-    private fun restoreOverlays() {
-        val enableBubble = prefs.getBoolean("enable_floating_bubble", true)
-        val enableBottomBar = prefs.getBoolean("enable_bottom_bar", true)
+    private fun restoreOverlays(delayMs: Long = 0L) {
+        serviceScope.launch(Dispatchers.Main) {
+            if (delayMs > 0) {
+                kotlinx.coroutines.delay(delayMs)
+            }
+            val enableBubble = prefs.getBoolean("enable_floating_bubble", true)
+            val enableBottomBar = prefs.getBoolean("enable_bottom_bar", true)
 
-        if (enableBubble && !overlayManager.isBubbleShowing()) {
-            overlayManager.showBubble(
-                platform = "LINE",
-                onClick = { handleActionTrigger(currentMode) }
-            )
-        }
-        if (enableBottomBar && !overlayManager.isBottomBarShowing()) {
-            overlayManager.showBottomBar(
-                onModeClick = { mode ->
-                    currentMode = mode
-                    handleActionTrigger(mode)
-                }
-            )
+            if (enableBubble && !overlayManager.isBubbleShowing()) {
+                overlayManager.showBubble(
+                    platform = "LINE",
+                    onClick = { handleActionTrigger(currentMode) }
+                )
+            }
+            if (enableBottomBar && !overlayManager.isBottomBarShowing()) {
+                overlayManager.showBottomBar(
+                    onModeClick = { mode ->
+                        currentMode = mode
+                        handleActionTrigger(mode)
+                    }
+                )
+            }
         }
     }
 
