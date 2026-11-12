@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.1.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.2.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,21 +46,22 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.1
-          name: LINE & Bumble AI Reply Assistant v2.0.1 (4層6役App専任スクワッド適用・レイテンシ実測＆モード解説搭載)
+          tag_name: v2.0.2
+          name: LINE & Bumble AI Reply Assistant v2.0.2 (外国人・英語話者への100%ネイティブ英語返信完全保証)
           body: |
-            ## LINE & Bumble AI返信アシスタント v2.0.1 (App Squad Edition)
+            ## LINE & Bumble AI返信アシスタント v2.0.2 (English Speaker Support)
 
-            ### 🏗️ 1. 【4層6役App専任スクワッド（PM・UI/UX・Core・Subsystem・Reviewer・QA）適用】
-            - **アプリ内4大AIモード解説カード追加**: 返信・日程・話題・分析の各モードの役割とプロンプト方針をアプリ内で一目で把握可能に。
-            - **稼働中モデル＆実測レイテンシ可視化**: 通信テスト時に応答ミリ秒（例: 742ms）を表示し、アクティブなGeminiモデルをUIに常時表示。
-            - **通信サーキットブレーカー完全適用**: APIキー不正（400/403）時に無駄なモデルループを即時中断し、0.5秒でエラー原因を親切案内。
+            ### 🌍 1. 【外国人・英語話者への英語返信を完全実装（日本語返信厳禁）】
+            - **スクショ画像認識（Gemini Vision）での言語自動判定**: 相手の最新メッセージが英語、または相手が外国人/バイリンガル、Bumble等のプロフィール・チャットが英語である場合、**返信案4つをすべて100%自然でチャーミングな日常会話のネイティブ英語（タメ口・短文・スラング）で作成**するルールをプロンプト最上位に厳格設定。
+            - **クリップボード・テキスト返信での英語自動検知**: ラテン文字比率や外国キーワードを自動検知し、英語話者の場合は100%英語で返信案を生成。
+            - **全4モード（返信・日程・話題・分析）の英語専用プロンプト完備**: 神奈川エリア（Yokohama, Shonan, Chigasaki, Ebina）のスマートな提案も含め、自然な英語表現に完全対応。
+            - **オフライン/フォールバック時の英語対応**: 英語相手の通信エラー時にも日本語が出ず、英語の高品質フォールバック候補を表示。
 
             ### 🔒 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v2.0.1.apk
+            app/build/outputs/apk/release/line-ai-reply-v2.0.2.apk
 
           make_latest: true
         env:
