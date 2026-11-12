@@ -25,6 +25,7 @@ import com.antigravity.lineaireply.ai.SmartChatAssistant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -456,6 +457,9 @@ class FloatingBubbleService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        try {
+            serviceScope.cancel()
+        } catch (_: Exception) {}
         screenshotObserver?.let {
             try {
                 contentResolver.unregisterContentObserver(it)

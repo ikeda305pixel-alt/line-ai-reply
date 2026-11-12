@@ -128,14 +128,17 @@ object ScreenshotDetectionHelper {
     }
 
     /**
-     * Downscales the screenshot image to at most 1024px and compresses to fast Base64 JPEG.
+     * Downscales the screenshot image to at most 768px (optimizing for Gemini Vision single 258-token tile)
+     * and compresses to fast Base64 JPEG. Includes OOM protection and guaranteed bitmap recycling.
      */
     fun loadAndEncodeScreenshot(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 1024,
+        maxDimension: Int = 768,
         quality: Int = 75
     ): String? {
+        var rawBitmap: Bitmap? = null
+        var scaledBitmap: Bitmap? = null
         return try {
             // 1. Decode bounds
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -155,20 +158,18 @@ object ScreenshotDetectionHelper {
                 inPreferredConfig = Bitmap.Config.RGB_565
             }
 
-            val rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+            rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, decodeOptions)
             } ?: return null
 
-            // 3. Exact scaling
+            // 3. Exact scaling to long-edge 768px
             val width = rawBitmap.width
             val height = rawBitmap.height
             val scale = maxDimension.toFloat() / Math.max(width, height).toFloat()
-            val scaledBitmap = if (scale < 1.0f) {
+            scaledBitmap = if (scale < 1.0f) {
                 val sw = (width * scale).toInt().coerceAtLeast(1)
                 val sh = (height * scale).toInt().coerceAtLeast(1)
-                val scaled = Bitmap.createScaledBitmap(rawBitmap, sw, sh, true)
-                rawBitmap.recycle()
-                scaled
+                Bitmap.createScaledBitmap(rawBitmap, sw, sh, true)
             } else {
                 rawBitmap
             }
@@ -176,12 +177,19 @@ object ScreenshotDetectionHelper {
             // 4. Compress to JPEG Base64
             val baos = ByteArrayOutputStream()
             scaledBitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
-            scaledBitmap.recycle()
-
             Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load/encode screenshot: ${e.message}")
+        } catch (t: Throwable) {
+            Log.e(TAG, "Failed to load/encode screenshot: ${t.message}", t)
             null
+        } finally {
+            try {
+                if (scaledBitmap != null && scaledBitmap != rawBitmap && !scaledBitmap.isRecycled) {
+                    scaledBitmap.recycle()
+                }
+                if (rawBitmap != null && !rawBitmap.isRecycled) {
+                    rawBitmap.recycle()
+                }
+            } catch (_: Exception) {}
         }
     }
 

@@ -42,18 +42,11 @@ class SmartChatAssistant(
     companion object {
         private const val TAG = "SmartChatAssistant"
 
-        var cachedWorkingModel: String? = null
-
-        val FALLBACK_CANDIDATE_MODELS = listOf(
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite",
-            "gemma-4-26b-a4b-it",
-            "gemini-3.1-flash-image-preview",
-            "gemini-3-flash-preview",
-            "gemini-3.8-flash",
-            "gemini-flash-latest",
-            "gemini-3.5-flash"
-        )
+        var cachedWorkingModel: String?
+            get() = DynamicModelRouterPlugin.cachedWorkingModel
+            set(value) {
+                DynamicModelRouterPlugin.cachedWorkingModel = value
+            }
 
         fun sanitizeApiKey(rawKey: String): String = DynamicModelRouterPlugin.sanitizeKey(rawKey)
 

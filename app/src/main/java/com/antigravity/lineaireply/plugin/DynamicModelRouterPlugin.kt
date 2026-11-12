@@ -52,8 +52,9 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
         .build()
 
     private val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -62,17 +63,13 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         val cleanKey = sanitizeKey(apiKey)
         if (cleanKey.isBlank()) return@withContext emptyList()
         try {
-            val listClient = OkHttpClient.Builder()
-                .connectTimeout(6, TimeUnit.SECONDS)
-                .readTimeout(8, TimeUnit.SECONDS)
-                .build()
             val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey"
             val req = Request.Builder()
                 .url(url)
                 .addHeader("x-goog-api-key", cleanKey)
                 .get()
                 .build()
-            val resp = listClient.newCall(req).execute()
+            val resp = client.newCall(req).execute()
             if (resp.isSuccessful) {
                 val body = resp.body?.string() ?: ""
                 val root = JSONObject(body)
@@ -164,7 +161,10 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                         put(JSONObject().put("text", prompt))
                     }
                     put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-                    put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+                    put("generationConfig", JSONObject().apply {
+                        put("responseMimeType", "application/json")
+                        put("maxOutputTokens", 500)
+                    })
                 }
 
                 val req = Request.Builder()
@@ -189,7 +189,11 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     if (cachedWorkingModel == model) {
                         cachedWorkingModel = null
                     }
-                    Log.w(TAG, "Model $model returned error: $lastError, switching to next candidate...")
+                    Log.w(TAG, "Model $model returned error: $lastError")
+                    // Circuit breaker: Non-retryable key or auth errors should fail immediately rather than looping through all models
+                    if (code == 400 || code == 403) {
+                        break
+                    }
                     continue
                 }
 

@@ -187,6 +187,8 @@ class SmartOverlayManager(private val context: Context) {
             windowManager.addView(view, params)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding bubble to WindowManager: ${e.message}", e)
+            bubbleView = null
+            bubbleParams = null
         }
     }
 
@@ -302,6 +304,8 @@ class SmartOverlayManager(private val context: Context) {
             windowManager.addView(view, params)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding bottom bar to WindowManager: ${e.message}", e)
+            bottomBarView = null
+            bottomBarParams = null
         }
     }
 
@@ -343,10 +347,21 @@ class SmartOverlayManager(private val context: Context) {
             Log.w(TAG, "Failed requesting focus: ${e.message}")
         }
 
+        var focusListener: android.view.ViewTreeObserver.OnWindowFocusChangeListener? = null
         var handled = false
         fun retrieveAndRestore() {
             if (handled) return
             handled = true
+
+            // Guaranteed unregistration of focus listener to prevent leaks
+            focusListener?.let {
+                try {
+                    v.viewTreeObserver?.removeOnWindowFocusChangeListener(it)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed removing focus listener: ${e.message}")
+                }
+            }
+
             val clipText = readClipboardDirect()
 
             // Restore original flags
@@ -361,18 +376,12 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         // Detect window focus change or fallback after 100ms
-        v.viewTreeObserver?.addOnWindowFocusChangeListener(object : android.view.ViewTreeObserver.OnWindowFocusChangeListener {
-            override fun onWindowFocusChanged(hasFocus: Boolean) {
-                if (hasFocus) {
-                    try {
-                        v.viewTreeObserver?.removeOnWindowFocusChangeListener(this)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed removing focus listener: ${e.message}")
-                    }
-                    retrieveAndRestore()
-                }
+        focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) {
+                retrieveAndRestore()
             }
-        })
+        }
+        v.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
 
         v.postDelayed({
             retrieveAndRestore()
@@ -550,10 +559,16 @@ class SmartOverlayManager(private val context: Context) {
                 btn.visibility = View.VISIBLE
                 btn.text = "${opt.label}: ${opt.text}"
                 btn.setOnClickListener {
+                    try {
+                        it.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                    } catch (_: Exception) {}
                     copyToClipboard(opt.text)
+                    btn.text = "✓ コピー完了！ ${opt.text}"
                     onSelect(opt.text)
-                    hideReplies()
-                    onDismiss?.invoke()
+                    btn.postDelayed({
+                        hideReplies()
+                        onDismiss?.invoke()
+                    }, 200)
                 }
             } else {
                 btn.visibility = View.GONE

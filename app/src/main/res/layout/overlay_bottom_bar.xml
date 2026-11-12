@@ -10,22 +10,22 @@
     android:paddingHorizontal="6dp"
     android:paddingVertical="3dp">
 
-    <!-- Drag Handle / Indicator -->
+    <!-- Drag Handle / Indicator (Wider touch area) -->
     <TextView
         android:id="@+id/btnBottomBarDrag"
-        android:layout_width="20dp"
-        android:layout_height="32dp"
+        android:layout_width="32dp"
+        android:layout_height="36dp"
         android:gravity="center"
         android:text="⋮⋮"
         android:textColor="#94A3B8"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <!-- AI Tag -->
     <TextView
         android:id="@+id/textBarTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="4dp"
+        android:layout_marginEnd="6dp"
         android:text="AI"
         android:textStyle="bold"
         android:textColor="#059669"
@@ -43,11 +43,11 @@
         <Button
             android:id="@+id/btnBarReply"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginEnd="3dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="@color/line_green"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="10dp"
             android:text="💬 返信"
             android:textColor="@color/white"
             android:textSize="11sp" />
@@ -56,11 +56,11 @@
         <Button
             android:id="@+id/btnBarSchedule"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginEnd="3dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#0EA5E9"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="10dp"
             android:text="📅 日程"
             android:textColor="@color/white"
             android:textSize="11sp" />
@@ -69,11 +69,11 @@
         <Button
             android:id="@+id/btnBarTopic"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginEnd="3dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#F59E0B"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="10dp"
             android:text="💡 話題"
             android:textColor="@color/white"
             android:textSize="11sp" />
@@ -82,11 +82,11 @@
         <Button
             android:id="@+id/btnBarMood"
             android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:layout_marginEnd="4dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="5dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#8B5CF6"
-            android:paddingHorizontal="8dp"
+            android:paddingHorizontal="10dp"
             android:text="🔍 分析"
             android:textColor="@color/white"
             android:textSize="11sp" />
@@ -95,21 +95,22 @@
     <!-- Minimize / Expand Toggle -->
     <TextView
         android:id="@+id/btnBarMinimize"
-        android:layout_width="22dp"
-        android:layout_height="32dp"
+        android:layout_width="26dp"
+        android:layout_height="36dp"
         android:gravity="center"
         android:text="◀"
         android:textColor="#64748B"
-        android:textSize="11sp" />
+        android:textSize="12sp" />
 
     <!-- Close button -->
     <TextView
         android:id="@+id/btnBarClose"
-        android:layout_width="22dp"
-        android:layout_height="32dp"
+        android:layout_width="26dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="2dp"
         android:gravity="center"
         android:text="✕"
         android:textColor="#94A3B8"
-        android:textSize="13sp" />
+        android:textSize="14sp" />
 
 </LinearLayout>
