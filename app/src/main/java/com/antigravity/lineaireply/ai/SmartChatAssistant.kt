@@ -40,6 +40,14 @@ class SmartChatAssistant(
     companion object {
         private const val TAG = "SmartChatAssistant"
 
+        var cachedWorkingModel: String? = null
+
+        val FALLBACK_CANDIDATE_MODELS = listOf(
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash"
+        )
+
         fun sanitizeApiKey(rawKey: String): String = DynamicModelRouterPlugin.sanitizeKey(rawKey)
 
         suspend fun testApiKey(apiKey: String): Pair<Boolean, String> {
@@ -56,26 +64,22 @@ class SmartChatAssistant(
         }
     }
 
-    private var cachedWorkingModel: String? = null
-
     fun updateApiKey(newKey: String) {
         this.apiKey = sanitizeApiKey(newKey)
     }
 
     suspend fun generateReplies(
-        context: ExtractedConversationContext,
+        context: ChatContext,
         forceLineInvite: Boolean = false
     ): GenerationResult = withContext(Dispatchers.IO) {
         val currentKey = apiKey.trim()
-        val userStyle = memoryManager?.getUserStyle() ?: com.antigravity.lineaireply.plugin.UserStyleProfile(
-            tone = "親しみやすくユーモアのある自然体",
-            keywords = emptyList(),
-            samplePhrases = emptyList(),
+        val userStyle = memoryManager?.getUserStyle() ?: UserStyleProfile(
             summary = "自然な会話",
+            sampleQuotes = emptyList(),
             totalLearnedCount = 0
         )
         val shouldInvite = forceLineInvite || context.isBumble
-        val partnerDossier = memoryManager?.getPartnerDossier(context.partnerName) ?: com.antigravity.lineaireply.plugin.PartnerDossier(
+        val partnerDossier = memoryManager?.getPartnerDossier(context.partnerName) ?: PartnerDossier(
             name = context.partnerName.ifEmpty { "相手" },
             location = "不明",
             personalityType = "感情表現豊か・リアクション重視",
