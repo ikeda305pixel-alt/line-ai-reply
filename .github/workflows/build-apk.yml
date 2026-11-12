@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.9.4.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.9.5.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,31 +46,29 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.9.4
-          name: LINE & Bumble AI Reply Assistant v1.9.4 (爆速1.0秒化・画面最下部最新メッセージ高精度認識・トップドックバー＆折りたたみ対応)
+          tag_name: v1.9.5
+          name: LINE & Bumble AI Reply Assistant v1.9.5 (HTTP 429枠上限自動回避・gemini-3.1-flash-liteマルチモーダル直行・実稼働保証)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.9.4
+            ## LINE & Bumble AI返信アシスタント v1.9.5
 
-            ### ⚡ 1. 【爆速化・ラグ完全解消（10秒超 → 約1.0秒）】
-            - **実在稼働モデル（Gemini 2.5 Flash / 2.0 Flash）優先直行ルーティング**: 存在しないモデルへの連続404試行ループおよび起動時ブロッキング全モデル探索を撤廃。
-            - **画像軽量圧縮（1024px / 75%）**: ペイロードを約80KB〜100KBに抑え、アップロード通信時間を大幅削減。
-            - **タイムアウト短縮**: クライアント接続5秒・読込10秒のFail-Fast設計。
+            ### 🛡️ 1. 【HTTP 429（利用枠制限）の完全自動回避・動的フォールバック】
+            - **Google AI Studio モデル別クォータ自動切替**: `gemini-3.8-flash`等の1日20回上限到達（429）を検知すると、キャッシュを自動破棄して別枠の無料枠を持つ稼働中モデルへ即座にスイッチ。
+            - **実通確認済モデル直行**: 実際に200 OK応答とマルチモーダル画像返信生成が確認済みの `gemini-3.1-flash-lite` および `gemini-3.5-flash-lite` を初手優先に配置。
+            - **全滅時の親切ガイダンス**: 万が一全モデルの無料枠が尽きた場合も、新しい無料APIキーの取得方法をわかりやすくポップアップ内に案内。
 
-            ### 🎯 2. 【LINE画面最下部の「相手の最新メッセージ」ピンポイント認識】
-            - **トーク構造の明示的プロンプティング**: 画面上部や中央にある過去メッセージ（古いやり取り）を完全無視し、画面の最下部（入力欄の直上）にある左側の相手吹き出しのみを返信対象に指定。
-            - **返信対象プレビュー機能**: ポップアップ内に「🎯 返信対象: 『〇〇』」を表示し、どのメッセージに反応しているかをひと目で確認可能。
-            - **スクショ保存待ち＆時刻ズレ許容**: スクショ撮影直後の `IS_PENDING` 自動リトライ、および -5秒〜60秒の時刻差許容で取りこぼしを根絶。
+            ### 🎯 2. 【LINE画面最下部の「相手の最新メッセージ」ピンポイント認識（継承）】
+            - **トーク構造の明示的プロンプティング**: 画面上部の過去ログを完全無視し、画面の最下部（入力欄直上）にある左側の相手吹き出しのみを返信対象に指定。
+            - **「🎯 返信対象: 『〇〇』」プレビュー表示**: どのメッセージに反応したかを常時明示。
 
-            ### 🔝 3. 【アクションバーの画面上部（Top Dock）移動 ＆ 折りたたみ対応】
-            - **キーボード・入力欄の干渉完全根絶**: LINEの文字入力欄・キーボード・送信ボタンを塞がないよう、バーを画面上部（ステータスバー直下・ヘッダー帯）に標準配置。
-            - **ワンタップ折りたたみ（◀ / ▶）**: ボタン列を最小化し、小さなピルバッジとして邪魔にならずに常駐可能。自由ドラッグ移動にも完全対応。
-            - **返信選択後の復帰ディレイ（1.2秒）**: 返信文コピー直後にバーが邪魔にならないよう、落ち着いてペースト・送信できる時間を確保。
+            ### 🔝 3. 【画面上部Top Dockバー＆ワンタップ折りたたみ（継承）】
+            - **入力欄・キーボード完全非干渉**: 画面上部ヘッダー帯に配置され、返信入力を一切妨害しません。
+            - **ワンタップ折りたたみ（◀ / ▶）**: 邪魔な時はいつでも小さなピルバッジに最小化可能。
 
             ### 🔒 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.9.4.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.9.5.apk
 
           make_latest: true
         env:

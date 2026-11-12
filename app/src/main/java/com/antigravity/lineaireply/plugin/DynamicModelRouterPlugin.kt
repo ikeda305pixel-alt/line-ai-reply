@@ -25,12 +25,14 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         const val TAG = "DynamicModelRouter"
 
         val CANDIDATE_MODELS = listOf(
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-2.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemma-4-26b-a4b-it",
+            "gemini-3.1-flash-image-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.8-flash",
             "gemini-flash-latest",
-            "gemini-3-flash-preview"
+            "gemini-3.5-flash"
         )
 
         @Volatile
@@ -179,12 +181,15 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     val friendlyMsg = when (code) {
                         400 -> "HTTP 400 (無効なAPIキー): キー形式を確認してください"
                         403 -> "HTTP 403 (権限エラー): Google CloudでGenerative Language APIが有効か確認してください"
-                        404 -> "HTTP 404 (モデル $model 未検出)"
-                        429 -> "HTTP 429 (利用枠制限): しばらく待って再試行してください"
+                        404 -> "HTTP 404 (モデル $model は非提供)"
+                        429 -> "HTTP 429 (モデル $model の個別枠上限)"
                         else -> "HTTP $code: $respStr"
                     }
                     lastError = friendlyMsg
-                    Log.w(TAG, "Model $model returned error: $lastError")
+                    if (cachedWorkingModel == model) {
+                        cachedWorkingModel = null
+                    }
+                    Log.w(TAG, "Model $model returned error: $lastError, switching to next candidate...")
                     continue
                 }
 
@@ -214,7 +219,12 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
             }
         }
 
-        ModelResult(false, "", "", lastError)
+        val finalError = if (lastError.contains("429")) {
+            "Google AIの無料利用枠上限（HTTP 429）に達しました。\nGoogle AI Studio (aistudio.google.com) で無料の新しいAPIキーを取得して設定するか、リセットまでしばらくお待ちください。"
+        } else {
+            lastError
+        }
+        ModelResult(false, "", "", finalError)
     }
 
     override suspend fun testApiKey(apiKey: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
