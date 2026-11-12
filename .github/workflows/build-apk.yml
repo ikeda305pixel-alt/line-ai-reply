@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.7.0.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.8.0.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,33 +46,36 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.7.0
-          name: LINE & Bumble AI Reply Assistant v1.7.0 (MediaProjection完全撤廃・通知キャッシュ＆クリップボード連携・Android 15画面保護対応)
+          tag_name: v1.8.0
+          name: LINE & Bumble AI Reply Assistant v1.8.0 (通知OFF・PayPay完全共存・スクショ自動検知＆クリップボード連携・Android 15画面保護対応)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.7.0
+            ## LINE & Bumble AI返信アシスタント v1.8.0
 
-            ### 🚀 【MediaProjection（画面録画）＆AccessibilityService完全撤廃】
-            1. **Android 15画面保護による黒画面ブロック問題を根本解決**:
-               - Android 15以降の画面共有セキュリティ保護（"セキュリティ上、画面共有ではアプリの内容は非表示となります"）により強制黒塗りされる問題を完全解消。
-               - 画面キャプチャ（MediaProjection）およびAccessibilityServiceをコードベースから100%削除。
-               - ステータスバー左上の赤い録画中アイコンやOSのセキュリティ警告も一切表示されなくなりました。
-            2. **PayPay・銀行アプリの安全両立を恒久維持**:
-               - 引き続きAccessibilityServiceは存在しないため、PayPayや各行バンキングアプリの不正検知（RASP）に100%抵触しません。
+            ### 🚀 【LINE通知OFF環境に完全対応＆PayPay安全両立】
+            LINEの通知をOFFにしているユーザー様向けに、MediaProjectionとAccessibilityServiceを完全撤廃した状態で、LINE画面上で快適にAI返信を生成できる新アーキテクチャへ移行しました。
 
-            ### 📥 【NotificationListenerService（通知キャッシュ）＋クリップボード連携】
-            1. **通知のバックグラウンド自動キャッシュ**:
-               - LINE（およびBumble）の通知を受信すると、送信者・トークルームごとに直近メッセージ履歴をアプリ内ローカルストレージへ安全に自動記録。
-            2. **画面端バブルから4つのアクションモードを瞬時に選択**:
-               - **💬 返信提案**: 相手のトーンに合わせた高EQなスマート返信案
-               - **📅 日程調整**: 神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定のスマートなお誘い・日程提案
-               - **💡 話題提案**: 相手の興味を惹きつける会話のきっかけ・質問
-               - **🎭 ムード分析**: 相手の心理状態・好感度分析と戦略的返信プラン
-            3. **複数トークルームのワンタップ切り替え**:
-               - ポップアップ上部の名前チップ（`[👤 あやか (選択中)]` `[👤 田中]`）をタップするだけで、直近の会話相手を即座に切り替え可能。
-            4. **クリップボード優先反映**:
-               - LINE等で特定のメッセージを長押しコピーしておくと、AIがクリップボードのテキストを最優先コンテキストとして認識して返信を作成。
-            5. **ワンタップ自動コピー**:
-               - 案をタップするとクリップボードにコピーされ、トーストが表示。トーク入力欄にそのまま貼り付けて送信できます。
+            ### 📸 【ルートA：OS標準スクリーンショット自動検知（MediaStore）】
+            1. **Android 15の画面共有黒画面ブロックを根本回避**:
+               - アプリによる画面録画（MediaProjection）ではなく、ユーザーが通常通り撮影したOS標準スクリーンショット（電源＋音量下など）を自動検知。
+               - Android 15のOS画面共有保護（"セキュリティ上、画面共有ではアプリの内容は非表示となります"）に一切抵触せず、LINEトーク画面の内容を100%正確にGemini Visionが直接解析します。
+            2. **直近15秒以内のスクショを最優先で自動ロード**:
+               - バブルまたは下部バーをタップした際、直近15秒以内に撮影された最新スクショがあれば自動的にGemini Visionへ送信して返信候補を生成。
+            3. **一時スクショ自動削除オプション**:
+               - AI解析後に一時スクショをストレージから自動削除する設定スイッチを追加（端末容量を圧迫しません）。
+
+            ### 📋 【ルートB：クリップボード自動読み取り（Window Focusトリック）】
+            1. **Android 10+のバックグラウンドクリップボード制限をクリア**:
+               - バブルまたは下部バーがタップされた瞬間にオーバーレイのフォーカスを一時取得し、`ClipboardManager`からコピーされたLINEメッセージを確実に取得。
+               - スクショがない場合でも、トーク内のメッセージを長押しコピーしてボタンを押すだけで即座にAI返信案を生成します。
+
+            ### ✍️ 【ルートC：インライン一言メモ入力】
+            - スクショもコピー文もない場合、オーバーレイ上にミニ入力バーが表示され、その場で「明日の予定」「カフェお誘い」などのキーワードを入力してAI生成できます。
+
+            ### 🎛️ 【画面端バブル ＆ 画面下部バー（4つの即答モード）】
+            - **💬 返信提案**: 相手のトーンに合わせた高EQなスマート返信案
+            - **📅 日程調整**: 神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定のスマートなお誘い・日程提案（東京提案は完全禁止）
+            - **💡 話題提案**: 相手の興味を惹きつける会話のきっかけ・質問
+            - **🔍 ムード分析**: 相手の心理状態・好感度分析と戦略的返信プラン
 
             ### 🎯 【既存の高品質アシストルールの完全継承】
             - **敬語完全同期**: 相手が敬語なら必ず丁寧語（です・ます調）で統一。
@@ -83,7 +86,7 @@ jobs:
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.7.0.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.8.0.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

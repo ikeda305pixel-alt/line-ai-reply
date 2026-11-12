@@ -35,7 +35,7 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="通知キャッシュからコンテキスト取得中..."
+            android:text="AI解析準備完了"
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
 
@@ -48,21 +48,6 @@
             android:textColor="@color/text_secondary"
             android:textSize="16sp" />
     </LinearLayout>
-
-    <!-- Room / Partner Selector (Horizontal scrollable chips) -->
-    <HorizontalScrollView
-        android:id="@+id/scrollRooms"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/layoutRoomChips"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
 
     <!-- 4 Mode Action Selector Bar (返信提案 / 日程調整 / 話題提案 / ムード分析) -->
     <HorizontalScrollView
@@ -116,13 +101,29 @@
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:paddingHorizontal="10dp"
-                android:text="🎭 ムード分析"
+                android:text="🔍 ムード分析"
                 android:textColor="@color/text_primary"
                 android:textSize="11sp" />
         </LinearLayout>
     </HorizontalScrollView>
 
-    <!-- Clipboard text priority preview (visible when clipboard contains text) -->
+    <!-- Screenshot Priority Banner -->
+    <TextView
+        android:id="@+id/textScreenshotPreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="#ECFDF5"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="4dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="📸 直近スクショを反映中"
+        android:textColor="#047857"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+    <!-- Clipboard Text Priority Banner -->
     <TextView
         android:id="@+id/textClipboardPreview"
         android:layout_width="match_parent"
@@ -133,25 +134,61 @@
         android:paddingVertical="4dp"
         android:ellipsize="end"
         android:maxLines="2"
-        android:text="📋 コピー文を反映: 「...」"
+        android:text="📋 コピー文を反映中"
         android:textColor="#92400E"
         android:textSize="11sp"
         android:visibility="gone" />
 
-    <!-- Partner's latest messages preview from Notification Cache -->
-    <TextView
-        android:id="@+id/textPartnerMessagePreview"
+    <!-- Mini Input Layout (Visible when neither screenshot nor clipboard is available, or user taps 手動入力) -->
+    <LinearLayout
+        android:id="@+id/layoutMiniInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:background="#10000000"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="5dp"
-        android:ellipsize="end"
-        android:maxLines="3"
-        android:text="相手の直近通知: 「...」"
-        android:textColor="@color/text_primary"
-        android:textSize="11sp" />
+        android:background="#F1F5F9"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/textMiniInputGuide"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💡 LINEでスクショ（電源＋音量下）を撮るか、メッセージをコピーすると自動解析されます。\nここに一言メモを入力して直接AI生成も可能です："
+            android:textColor="#475569"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/editMiniPrompt"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@android:drawable/edit_text"
+                android:hint="例: 明日の予定 / カフェお誘い"
+                android:imeOptions="actionDone"
+                android:inputType="text"
+                android:paddingHorizontal="8dp"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnMiniGenerate"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginStart="6dp"
+                android:backgroundTint="@color/line_green"
+                android:text="🚀 AI生成"
+                android:textColor="@color/white"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
 
     <!-- 4 Selectable Reply Options -->
     <LinearLayout
@@ -244,7 +281,7 @@
             android:layout_height="wrap_content"
             android:minWidth="0dp"
             android:paddingHorizontal="10dp"
-            android:text="✍️ 手動入力"
+            android:text="✍️ メモ入力"
             android:textColor="@color/line_green_dark"
             android:textSize="12sp"
             android:textStyle="bold" />

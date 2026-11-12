@@ -5,8 +5,8 @@
     <string name="hint_gemini_key">AIzaSy...</string>
     <string name="btn_save">設定を保存</string>
     <string name="btn_open_overlay">1. 重ねて表示を許可する</string>
-    <string name="btn_open_notification_access">2. 通知へのアクセスを許可する</string>
-    <string name="btn_start_bubble">3. 返信バブルを起動する</string>
-    <string name="btn_stop_bubble">⏹️ バブルを停止する</string>
+    <string name="btn_request_media_permission">2. 画像・メディアへのアクセスを許可する</string>
+    <string name="btn_start_bubble">3. アシスタント起動（バブル＆下部バー）</string>
+    <string name="btn_stop_bubble">⏹️ アシスタントを停止する</string>
     <string name="status_free_tier">本日のAI利用数: %1$d / 1,500 回 (完全無料)</string>
 </resources>

@@ -363,7 +363,7 @@ def test_ui_chat_confinement_and_anti_duplication():
 
 def test_paypay_and_financial_app_protection():
     import os
-    # 1. Verification of complete removal of AccessibilityService and MediaProjection
+    # 1. Verification of complete removal of AccessibilityService, MediaProjection, and NotificationListenerService
     assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/LineAccessibilityService.kt"), \
         "LineAccessibilityService.kt MUST be completely deleted!"
     assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/PayPayTileService.kt"), \
@@ -372,8 +372,12 @@ def test_paypay_and_financial_app_protection():
         "accessibility_service_config.xml MUST be completely deleted!"
     assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/ScreenCaptureHelper.kt"), \
         "ScreenCaptureHelper.kt MUST be completely deleted (MediaProjection removed)!"
+    assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/LineNotificationListenerService.kt"), \
+        "LineNotificationListenerService.kt MUST be deleted (Notification listener removed)!"
+    assert not os.path.exists("app/src/main/java/com/antigravity/lineaireply/service/NotificationChatCacheManager.kt"), \
+        "NotificationChatCacheManager.kt MUST be deleted!"
 
-    # 2. Verify AndroidManifest.xml has zero AccessibilityService/MediaProjection and registers NotificationListenerService
+    # 2. Verify AndroidManifest.xml has zero AccessibilityService/MediaProjection/NotificationListener
     with open("app/src/main/AndroidManifest.xml") as f:
         manifest_xml = f.read()
 
@@ -382,20 +386,22 @@ def test_paypay_and_financial_app_protection():
     assert "PayPayTileService" not in manifest_xml, "PayPayTileService must be removed from manifest!"
     assert "FOREGROUND_SERVICE_MEDIA_PROJECTION" not in manifest_xml, \
         "FOREGROUND_SERVICE_MEDIA_PROJECTION MUST be removed from manifest to prevent red recording icon and screen blackout!"
+    assert "LineNotificationListenerService" not in manifest_xml, \
+        "LineNotificationListenerService must be removed from manifest!"
+    assert "BIND_NOTIFICATION_LISTENER_SERVICE" not in manifest_xml, \
+        "BIND_NOTIFICATION_LISTENER_SERVICE must be removed from manifest!"
     assert "android.permission.SYSTEM_ALERT_WINDOW" in manifest_xml, \
         "Manifest must declare SYSTEM_ALERT_WINDOW!"
+    assert "android.permission.READ_MEDIA_IMAGES" in manifest_xml, \
+        "Manifest must declare READ_MEDIA_IMAGES for screenshot detection!"
     assert "FloatingBubbleService" in manifest_xml, \
         "Manifest must register FloatingBubbleService!"
-    assert "LineNotificationListenerService" in manifest_xml, \
-        "Manifest must register LineNotificationListenerService!"
-    assert "BIND_NOTIFICATION_LISTENER_SERVICE" in manifest_xml, \
-        "LineNotificationListenerService must require BIND_NOTIFICATION_LISTENER_SERVICE!"
 
-    # 3. Verify version 1.7.0 in build.gradle
+    # 3. Verify version 1.8.0 in build.gradle
     with open("app/build.gradle") as f:
         build_gradle = f.read()
-    assert 'versionName "1.7.0"' in build_gradle, "build.gradle MUST specify versionName 1.7.0!"
-    assert 'versionCode 24' in build_gradle, "build.gradle MUST specify versionCode 24!"
+    assert 'versionName "1.8.0"' in build_gradle, "build.gradle MUST specify versionName 1.8.0!"
+    assert 'versionCode 25' in build_gradle, "build.gradle MUST specify versionCode 25!"
 
     print("PayPay, Banking app & Android 15 zero-interference suite: PASS ✅")
 
@@ -559,45 +565,57 @@ def test_bubble_dismiss_and_keyboard_hiding():
 
     print("Bubble manual dismiss, edge snap & FloatingBubbleService suite: PASS ✅")
 
-def test_notification_cache_and_assistant_modes():
-    # 1. NotificationChatCacheManager verification
-    with open("app/src/main/java/com/antigravity/lineaireply/service/NotificationChatCacheManager.kt") as f:
-        cache_code = f.read()
-    assert "addMessage" in cache_code, "NotificationChatCacheManager must provide addMessage!"
-    assert "getMessagesForRoom" in cache_code, "NotificationChatCacheManager must provide getMessagesForRoom!"
-    assert "getRecentRooms" in cache_code, "NotificationChatCacheManager must provide getRecentRooms!"
-    assert "getMostRecentRoom" in cache_code, "NotificationChatCacheManager must provide getMostRecentRoom!"
-    assert "isPhoto" in cache_code, "CachedMessage must support isPhoto detection!"
+def test_screenshot_and_clipboard_architecture():
+    # 1. ScreenshotDetectionHelper verification
+    with open("app/src/main/java/com/antigravity/lineaireply/service/ScreenshotDetectionHelper.kt") as f:
+        helper_code = f.read()
+    assert "getRecentScreenshot" in helper_code, "ScreenshotDetectionHelper must provide getRecentScreenshot!"
+    assert "loadAndEncodeScreenshot" in helper_code, "ScreenshotDetectionHelper must provide loadAndEncodeScreenshot!"
+    assert "deleteScreenshot" in helper_code, "ScreenshotDetectionHelper must provide deleteScreenshot!"
+    assert "ScreenshotObserver" in helper_code, "ScreenshotDetectionHelper must provide ScreenshotObserver!"
 
-    # 2. LineNotificationListenerService verification
-    with open("app/src/main/java/com/antigravity/lineaireply/service/LineNotificationListenerService.kt") as f:
-        listener_code = f.read()
-    assert "NotificationListenerService" in listener_code, "LineNotificationListenerService must extend NotificationListenerService!"
-    assert "jp.naver.line.android" in listener_code, "LineNotificationListenerService must listen to LINE notifications!"
-    assert "com.bumble.app" in listener_code, "LineNotificationListenerService must listen to Bumble notifications!"
-    assert "isNotificationAccessGranted" in listener_code, "LineNotificationListenerService must check notification access!"
-    assert "NotificationChatCacheManager.addMessage" in listener_code, "Listener must cache incoming notifications!"
+    # 2. SmartOverlayManager verification (Window Focus Trick + Bottom Dock Bar)
+    with open("app/src/main/java/com/antigravity/lineaireply/service/SmartOverlayManager.kt") as f:
+        overlay_code = f.read()
+    assert "readClipboardWithFocusTrick" in overlay_code, "SmartOverlayManager must implement readClipboardWithFocusTrick!"
+    assert "FLAG_NOT_FOCUSABLE" in overlay_code, "SmartOverlayManager must manipulate FLAG_NOT_FOCUSABLE for window focus!"
+    assert "showBottomBar" in overlay_code, "SmartOverlayManager must provide showBottomBar!"
+    assert "showReplies" in overlay_code, "SmartOverlayManager must provide showReplies!"
+    assert "snapToEdge" in overlay_code, "SmartOverlayManager must support snapToEdge!"
+    assert "copyToClipboard" in overlay_code, "SmartOverlayManager must support copyToClipboard!"
 
-    # 3. SmartChatAssistant 4 Action Modes & notification context analysis
+    # 3. SmartChatAssistant 4 Action Modes & Vision/Clipboard routing
     with open("app/src/main/java/com/antigravity/lineaireply/ai/SmartChatAssistant.kt") as f:
         assistant_code = f.read()
-    assert "enum class AssistantMode" in assistant_code, "SmartChatAssistant must define AssistantMode!"
-    assert "REPLY" in assistant_code and "SCHEDULE" in assistant_code and "TOPIC" in assistant_code and "MOOD" in assistant_code, \
+    with open("app/src/main/java/com/antigravity/lineaireply/ai/AssistantMode.kt") as f:
+        mode_code = f.read()
+    assert "enum class AssistantMode" in mode_code, "AssistantMode enum must be defined!"
+    assert "REPLY" in mode_code and "SCHEDULE" in mode_code and "TOPIC" in mode_code and "MOOD" in mode_code, \
         "AssistantMode must have REPLY, SCHEDULE, TOPIC, and MOOD!"
-    assert "generateRepliesFromNotificationContext" in assistant_code, \
-        "SmartChatAssistant must provide generateRepliesFromNotificationContext!"
+    assert "generateFromScreenshot" in assistant_code, "SmartChatAssistant must provide generateFromScreenshot!"
+    assert "generateFromClipboard" in assistant_code, "SmartChatAssistant must provide generateFromClipboard!"
+    assert "generateFromUserNote" in assistant_code, "SmartChatAssistant must provide generateFromUserNote!"
     assert "厚木" in assistant_code and "茅ヶ崎" in assistant_code and "海老名" in assistant_code and "横浜" in assistant_code, \
         "Schedule mode must enforce Kanagawa locations!"
 
-    # 4. MainActivity Notification Access & Overlay flow (Zero MediaProjection)
+    # 4. FloatingBubbleService Priority Logic (Screenshot > Clipboard > Mini Input)
+    with open("app/src/main/java/com/antigravity/lineaireply/service/FloatingBubbleService.kt") as f:
+        service_code = f.read()
+    assert "getRecentScreenshot" in service_code, "FloatingBubbleService must check recent screenshots first!"
+    assert "readClipboardWithFocusTrick" in service_code, "FloatingBubbleService must check clipboard second!"
+    assert "generateFromUserNote" in service_code, "FloatingBubbleService must support mini input third!"
+
+    # 5. MainActivity Media Permission & Overlay flow (Zero MediaProjection / Zero Accessibility)
     with open("app/src/main/java/com/antigravity/lineaireply/MainActivity.kt") as f:
         main_code = f.read()
     assert "createScreenCaptureIntent" not in main_code, "MainActivity must have ZERO MediaProjection / screen capture code!"
-    assert "btnOpenNotificationAccess" in main_code, "MainActivity must wire btnOpenNotificationAccess!"
+    assert "getMediaPermissionString" in main_code, "MainActivity must check media permissions!"
+    assert "btnRequestMediaPermission" in main_code, "MainActivity must wire btnRequestMediaPermission!"
     assert "btnOpenOverlay" in main_code, "MainActivity must wire btnOpenOverlay!"
+    assert "switchAutoDeleteScreenshot" in main_code, "MainActivity must have switchAutoDeleteScreenshot!"
     assert "FloatingBubbleService.ACTION_START" in main_code, "MainActivity must launch FloatingBubbleService!"
 
-    print("Notification cache & 4 Assistant Modes suite: PASS ✅")
+    print("Screenshot auto-detection, clipboard focus trick & 4 Assistant Modes suite: PASS ✅")
 
 def test_bumble_system_filter_and_profile_extraction():
     bumble_sys_regex = r"(マッチしました|matched with|you matched|最初のメッセージ|first message|返信まであと|your move|your turn|時間以内に|質問ゲーム|question game|会話を始め|会話をスタート|メッセージを送信して|メッセージを送信しましょう|プロフィールを見る|view profile|会話の有効期限|有効期限が切|ゲームをプレイ|質問に回答|question answered|マッチを解除|期間を延長|延長されました|super swipe|スポットライト|プレミアム)"
@@ -647,8 +665,8 @@ def main():
     test_photo_reaction_pipeline()
     test_kanagawa_atsugi_chigasaki_localization()
     test_bubble_dismiss_and_keyboard_hiding()
-    test_notification_cache_and_assistant_modes()
-    print("All loop engineering v1.7.0 tests: 100% PASSED! 🚀")
+    test_screenshot_and_clipboard_architecture()
+    print("All loop engineering v1.8.0 tests: 100% PASSED! 🚀")
 
 if __name__ == "__main__":
     main()

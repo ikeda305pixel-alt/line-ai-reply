@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -21,13 +22,11 @@ import com.antigravity.lineaireply.ai.AssistantMode
 import com.antigravity.lineaireply.ai.SmartReplyOption
 
 /**
- * Floating Overlay Manager for Notification-backed AI Reply Assistant.
- * Responsibilities:
- * - Floating trigger bubble (💬) draggable with automatic left/right edge snapping.
- * - Multi-room switching chips (one-tap switch between recent chat rooms).
- * - 4 Action Mode selector (返信提案 / 日程調整 / 話題提案 / ムード分析).
- * - Priority clipboard context preview.
- * - Reply suggestions popup overlay with tap-to-copy and toast notification.
+ * Floating Overlay Manager supporting:
+ * 1. Draggable trigger bubble (💬) with edge snapping.
+ * 2. Draggable bottom action dock bar (💬 返信 / 📅 日程 / 💡 話題 / 🔍 分析).
+ * 3. Window Focus trick to bypass Android 10+ background clipboard restriction.
+ * 4. Reply options popup card with screenshot/clipboard preview & inline mini input fallback.
  */
 class SmartOverlayManager(private val context: Context) {
 
@@ -41,12 +40,29 @@ class SmartOverlayManager(private val context: Context) {
     private var bubbleView: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
 
+    // Floating Bottom Bar Dock
+    private var bottomBarView: View? = null
+    private var bottomBarParams: WindowManager.LayoutParams? = null
+
     // Reply Options Card
     private var cardView: View? = null
 
     fun isBubbleShowing(): Boolean = bubbleView != null
+    fun isBottomBarShowing(): Boolean = bottomBarView != null
     fun isRepliesShowing(): Boolean = cardView != null
 
+    private fun getOverlayLayoutType(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+    }
+
+    // ==========================================
+    // 1. Floating Bubble (💬)
+    // ==========================================
     fun showBubble(
         platform: String = "LINE",
         onClick: () -> Unit,
@@ -57,13 +73,6 @@ class SmartOverlayManager(private val context: Context) {
         val inflater = LayoutInflater.from(context)
         val view = inflater.inflate(R.layout.overlay_bubble_trigger, null)
 
-        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
         val displayMetrics = context.resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
@@ -71,7 +80,7 @@ class SmartOverlayManager(private val context: Context) {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            layoutType,
+            getOverlayLayoutType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -156,19 +165,167 @@ class SmartOverlayManager(private val context: Context) {
         }
     }
 
+    // ==========================================
+    // 2. Floating Bottom Action Bar Dock
+    // ==========================================
+    fun showBottomBar(
+        onModeClick: (AssistantMode) -> Unit,
+        onClose: (() -> Unit)? = null
+    ) {
+        if (bottomBarView != null) return
+
+        val inflater = LayoutInflater.from(context)
+        val view = inflater.inflate(R.layout.overlay_bottom_bar, null)
+
+        val displayMetrics = context.resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val screenHeight = displayMetrics.heightPixels
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            getOverlayLayoutType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = 120
+        }
+
+        bottomBarParams = params
+        bottomBarView = view
+
+        view.findViewById<Button>(R.id.btnBarReply)?.setOnClickListener { onModeClick(AssistantMode.REPLY) }
+        view.findViewById<Button>(R.id.btnBarSchedule)?.setOnClickListener { onModeClick(AssistantMode.SCHEDULE) }
+        view.findViewById<Button>(R.id.btnBarTopic)?.setOnClickListener { onModeClick(AssistantMode.TOPIC) }
+        view.findViewById<Button>(R.id.btnBarMood)?.setOnClickListener { onModeClick(AssistantMode.MOOD) }
+
+        view.findViewById<View>(R.id.btnBarClose)?.setOnClickListener {
+            hideBottomBar()
+            onClose?.invoke()
+        }
+
+        // Draggable handle
+        var initialX = 0
+        var initialY = 0
+        var touchDownX = 0f
+        var touchDownY = 0f
+
+        view.findViewById<View>(R.id.btnBottomBarDrag)?.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    initialX = params.x
+                    initialY = params.y
+                    touchDownX = event.rawX
+                    touchDownY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - touchDownX).toInt()
+                    val dy = (touchDownY - event.rawY).toInt() // invert for bottom gravity
+                    params.x = initialX + dx
+                    params.y = (initialY + dy).coerceAtLeast(30)
+                    try {
+                        windowManager.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
+                    true
+                }
+                else -> false
+            }
+        }
+
+        try {
+            windowManager.addView(view, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding bottom bar to WindowManager: ${e.message}")
+        }
+    }
+
+    fun hideBottomBar() {
+        bottomBarView?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (_: Exception) {}
+            bottomBarView = null
+        }
+    }
+
+    // ==========================================
+    // 3. Window Focus Trick for Clipboard Reading
+    // ==========================================
+    /**
+     * Momentarily clears FLAG_NOT_FOCUSABLE to obtain window focus, reads ClipboardManager,
+     * and promptly restores FLAG_NOT_FOCUSABLE.
+     */
+    fun readClipboardWithFocusTrick(targetView: View?, onResult: (String?) -> Unit) {
+        val v = targetView ?: bubbleView ?: bottomBarView ?: cardView
+        if (v == null) {
+            onResult(readClipboardDirect())
+            return
+        }
+
+        val params = v.layoutParams as? WindowManager.LayoutParams
+        if (params == null) {
+            onResult(readClipboardDirect())
+            return
+        }
+
+        val originalFlags = params.flags
+        // Clear FLAG_NOT_FOCUSABLE to allow window focus
+        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        v.isFocusable = true
+        v.isFocusableInTouchMode = true
+
+        try {
+            windowManager.updateViewLayout(v, params)
+            v.requestFocus()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed requesting focus: ${e.message}")
+        }
+
+        v.postDelayed({
+            val clipText = readClipboardDirect()
+
+            // Restore original flags
+            params.flags = originalFlags
+            try {
+                windowManager.updateViewLayout(v, params)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed restoring flags: ${e.message}")
+            }
+
+            onResult(clipText)
+        }, 50)
+    }
+
+    private fun readClipboardDirect(): String? {
+        return try {
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if (cm.hasPrimaryClip()) {
+                val item = cm.primaryClip?.getItemAt(0)
+                val text = item?.text?.toString()?.trim()
+                if (!text.isNullOrBlank()) text else null
+            } else null
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct clipboard read error: ${e.message}")
+            null
+        }
+    }
+
+    // ==========================================
+    // 4. Reply Options Popup Overlay
+    // ==========================================
     fun showReplies(
         platform: String = "LINE",
         summaryText: String,
-        currentRoom: String,
-        availableRooms: List<String>,
         currentMode: AssistantMode = AssistantMode.REPLY,
-        partnerMessage: String = "",
+        screenshotName: String? = null,
         clipboardText: String? = null,
         options: List<SmartReplyOption>,
-        onRoomSelected: (String) -> Unit,
         onModeSelected: (AssistantMode) -> Unit,
         onSelect: (String) -> Unit,
         onRegenerate: () -> Unit,
+        onMiniPromptSubmit: ((String) -> Unit)? = null,
         onDismiss: (() -> Unit)? = null
     ) {
         // Hide trigger bubble while modal is active
@@ -178,18 +335,12 @@ class SmartOverlayManager(private val context: Context) {
             val inflater = LayoutInflater.from(context)
             val view = inflater.inflate(R.layout.overlay_line_replies, null)
 
-            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
-                layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                getOverlayLayoutType(),
+                // Start without NOT_FOCUSABLE so EditText can accept input if needed
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -220,40 +371,7 @@ class SmartOverlayManager(private val context: Context) {
         }
         v.findViewById<TextView>(R.id.textContextSummary).text = summaryText
 
-        // 2. Room Switcher Chips
-        val layoutRooms = v.findViewById<LinearLayout>(R.id.layoutRoomChips)
-        layoutRooms?.removeAllViews()
-        val roomsToDisplay = if (availableRooms.isNotEmpty()) availableRooms else listOf(currentRoom)
-        for (room in roomsToDisplay) {
-            val isCurrent = (room == currentRoom)
-            val chip = TextView(context).apply {
-                text = if (isCurrent) "👤 $room (選択中)" else "👤 $room"
-                textSize = 11f
-                setPadding(20, 8, 20, 8)
-                val marginParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    marginEnd = 12
-                }
-                layoutParams = marginParams
-                if (isCurrent) {
-                    setTextColor(Color.WHITE)
-                    setBackgroundColor(Color.parseColor("#06C755"))
-                } else {
-                    setTextColor(Color.parseColor("#334155"))
-                    setBackgroundColor(Color.parseColor("#E2E8F0"))
-                }
-                setOnClickListener {
-                    if (!isCurrent) {
-                        onRoomSelected(room)
-                    }
-                }
-            }
-            layoutRooms?.addView(chip)
-        }
-
-        // 3. 4 Action Mode Buttons
+        // 2. 4 Action Mode Buttons
         fun updateModeButton(btn: Button, mode: AssistantMode) {
             val isSelected = (mode == currentMode)
             if (isSelected) {
@@ -275,26 +393,39 @@ class SmartOverlayManager(private val context: Context) {
         v.findViewById<Button>(R.id.btnModeTopic)?.let { updateModeButton(it, AssistantMode.TOPIC) }
         v.findViewById<Button>(R.id.btnModeMood)?.let { updateModeButton(it, AssistantMode.MOOD) }
 
-        // 4. Clipboard Priority Banner
-        v.findViewById<TextView>(R.id.textClipboardPreview)?.let { clipView ->
-            if (!clipboardText.isNullOrBlank()) {
-                clipView.visibility = View.VISIBLE
-                val snippet = if (clipboardText.length > 35) clipboardText.take(35) + "…" else clipboardText
-                clipView.text = "📋 クリップボード文を優先反映中: 「$snippet」"
-            } else {
-                clipView.visibility = View.GONE
-            }
+        // 3. Screenshot Preview Banner
+        val tvScreenshot = v.findViewById<TextView>(R.id.textScreenshotPreview)
+        if (!screenshotName.isNullOrBlank()) {
+            tvScreenshot?.visibility = View.VISIBLE
+            tvScreenshot?.text = "📸 直近スクショを反映中: 「$screenshotName」"
+        } else {
+            tvScreenshot?.visibility = View.GONE
         }
 
-        // 5. Partner Message Preview
-        v.findViewById<TextView>(R.id.textPartnerMessagePreview)?.let { preview ->
-            if (partnerMessage.isNotBlank()) {
-                val snippet = if (partnerMessage.length > 50) partnerMessage.take(50) + "…" else partnerMessage
-                preview.text = "💬 [$currentRoom] 直近通知: 「$snippet」"
-                preview.visibility = View.VISIBLE
+        // 4. Clipboard Preview Banner
+        val tvClipboard = v.findViewById<TextView>(R.id.textClipboardPreview)
+        if (!clipboardText.isNullOrBlank()) {
+            tvClipboard?.visibility = View.VISIBLE
+            val snippet = if (clipboardText.length > 40) clipboardText.take(40) + "…" else clipboardText
+            tvClipboard?.text = "📋 コピー文を反映中: 「$snippet」"
+        } else {
+            tvClipboard?.visibility = View.GONE
+        }
+
+        // 5. Mini Input Box (visible if neither screenshot nor clipboard, or if options empty)
+        val layoutMini = v.findViewById<LinearLayout>(R.id.layoutMiniInput)
+        val editMini = v.findViewById<EditText>(R.id.editMiniPrompt)
+        val btnMini = v.findViewById<Button>(R.id.btnMiniGenerate)
+
+        val needsMiniInput = screenshotName.isNullOrBlank() && clipboardText.isNullOrBlank() && options.isEmpty()
+        layoutMini?.visibility = if (needsMiniInput) View.VISIBLE else View.GONE
+
+        btnMini?.setOnClickListener {
+            val text = editMini?.text?.toString()?.trim() ?: ""
+            if (text.isNotBlank()) {
+                onMiniPromptSubmit?.invoke(text)
             } else {
-                preview.text = "💬 [$currentRoom] （まだ新しい通知はありません）"
-                preview.visibility = View.VISIBLE
+                Toast.makeText(context, "一言メモまたはキーワードを入力してください", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -323,15 +454,20 @@ class SmartOverlayManager(private val context: Context) {
             }
         }
 
-        // 7. Close and Actions
+        // 7. Bottom Action Controls
         v.findViewById<View>(R.id.btnClose).setOnClickListener {
             hideReplies()
             onDismiss?.invoke()
         }
 
         v.findViewById<View>(R.id.btnDirectType).setOnClickListener {
-            hideReplies()
-            onDismiss?.invoke()
+            // Toggle mini input box
+            if (layoutMini?.visibility == View.VISIBLE) {
+                layoutMini.visibility = View.GONE
+            } else {
+                layoutMini?.visibility = View.VISIBLE
+                editMini?.requestFocus()
+            }
         }
 
         v.findViewById<View>(R.id.btnRegenerate).setOnClickListener {
@@ -374,6 +510,7 @@ class SmartOverlayManager(private val context: Context) {
 
     fun hideAll() {
         hideBubble()
+        hideBottomBar()
         hideReplies()
     }
 }

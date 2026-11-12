@@ -36,7 +36,7 @@
                 android:paddingTop="4dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="4dp"
-                android:text="v1.7.0"
+                android:text="v1.8.0"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -46,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="通知キャッシュ＆クリップボード連携による超高速AI返信アシスタント"
+            android:text="通知OFF・PayPay完全共存対応（スクショ自動検知＋クリップボード連携）"
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
@@ -89,13 +89,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="画面録画（MediaProjection）とユーザー補助（AccessibilityService）を完全撤廃しました。OS画面共有制限による黒画面ブロックも、PayPayや銀行アプリの利用制限も100%発生せず、安全快適にご利用いただけます。"
+                    android:text="画面録画（MediaProjection）とユーザー補助（AccessibilityService）を完全撤廃しました。OS画面共有制限による黒画面ブロックも、PayPayや銀行アプリの利用制限も100%発生せず、LINE通知OFFでも安全快適にご利用いただけます。"
                     android:textColor="#047857"
                     android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Bubble Control & Permissions Card -->
+        <!-- Bubble & Assistant Control Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -114,7 +114,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="返信アシストバブル設定"
+                    android:text="返信アシスタント設定"
                     android:textColor="@color/text_primary"
                     android:textSize="15sp"
                     android:textStyle="bold" />
@@ -140,12 +140,12 @@
                     android:text="@string/btn_open_overlay" />
 
                 <Button
-                    android:id="@+id/btnOpenNotificationAccess"
+                    android:id="@+id/btnRequestMediaPermission"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="@string/btn_open_notification_access" />
+                    android:text="@string/btn_request_media_permission" />
 
                 <Button
                     android:id="@+id/btnStartBubble"
@@ -165,13 +165,44 @@
                     android:textColor="#DC2626"
                     android:text="@string/btn_stop_bubble" />
 
-                <TextView
+                <!-- Display Switches -->
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchFloatingBubble"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
+                    android:checked="true"
+                    android:text="画面端のバブル（💬）を表示する"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchBottomBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:checked="true"
+                    android:text="画面下部のバー（💬/📅/💡/🔍）を表示する"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchAutoDeleteScreenshot"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:checked="false"
+                    android:text="AI解析後に一時スクショを自動削除（ストレージ節約）"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
                     android:background="#FEF3C7"
                     android:padding="10dp"
-                    android:text="💡 使い方：\n① [1. 重ねて表示] と [2. 通知へのアクセス] を許可し、[3. 返信バブルを起動] をタップ。\n② LINEやBumbleでメッセージ通知を受信すると、最新のトーク履歴が自動でアプリ内に安全キャッシュされます。\n③ トーク画面で画面端の『💬』バブルをタップすると、[💬返信提案][📅日程調整][💡話題提案][🎭ムード分析] の4つのモードで返信案を瞬時に生成！\n④ 複数人のトークも、ポップアップ上部の名前チップでワンタップ切り替え可能。\n⑤ LINEのメッセージを長押しコピーしておくと、コピーした内容をAIが最優先で反映して返信します。"
+                    android:text="💡 LINE通知がOFFでも完全動作！\n① LINEでメッセージをコピーするか、スクショ（電源＋音量下）を撮影します。\n② 画面端の『💬』バブルまたは下部バー（💬 返信 / 📅 日程 / 💡 話題 / 🔍 分析）をタップ。\n③ 直近15秒以内のスクショがあれば優先的に画像解析し、なければコピーされたテキストから返信候補を生成します。\n④ 候補をタップすればクリップボードにコピーされるので、LINEの入力欄にペーストして送信するだけです！"
                     android:textColor="#92400E"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -311,41 +342,6 @@
                     android:layout_marginTop="6dp"
                     android:text="📋 過去ログテキストを貼り付けて学習" />
 
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Instructions Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="2dp"
-            app:strokeColor="@color/border"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="使い方"
-                    android:textColor="@color/text_primary"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:lineSpacingExtra="3dp"
-                    android:text="1. 「重ねて表示」と「通知へのアクセス」を許可します。\n2. 「返信バブルを起動」を押すと画面端に『💬』バブルが出現します。\n3. LINEでメッセージ通知を受信した状態で『💬』をタップすると、通知メッセージを元に[返信提案][日程調整][話題提案][ムード分析]から最適な返信を生成します。\n4. 気に入った案をタップするとクリップボードにコピーされますので、入力欄に貼り付けて送信してください。\n※ 過去のメッセージに返信したい時は、LINEでそのメッセージを長押しコピーするとAIが自動で反映します。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
