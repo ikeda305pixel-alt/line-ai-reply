@@ -33,7 +33,7 @@ jobs:
         run: |
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.9.0.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v1.9.1.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,16 +46,20 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.9.0
-          name: LINE & Bumble AI Reply Assistant v1.9.0 (MediaProjection完全撤去・OS標準スクショ20秒検知＆クリップボード連携・APIキー＆エラー直接可視化)
+          tag_name: v1.9.1
+          name: LINE & Bumble AI Reply Assistant v1.9.1 (ざっくばらん本音トーン復活・MediaProjection完全撤去・20秒スクショ検知＆クリップボード連携)
           body: |
-            ## LINE & Bumble AI返信アシスタント v1.9.0
+            ## LINE & Bumble AI返信アシスタント v1.9.1
+
+            ### ✨ 【ざっくばらん（自然体・本音・親近感）トーンの完全復活】
+            - LINE＆Bumbleの両方で、飾らない等身大の本音やぶっちゃけトーク、親しい間柄でのクスッと笑える「ざっくばらん」な返信スタイルを案4（丁寧語でも親しみやすい本音共感）に正式採用。
+            - 気取らない日常チャットから親密なやり取りまで、自然体で好印象な返信を1タップで選択可能。
 
             ### 🚀 【MediaProjection & AccessibilityService の完全撤廃】
             - 画面録画（MediaProjection）およびユーザー補助（AccessibilityService）のコードを完全抹消（0行）。
             - Android 15の画面共有黒画面ブロック（"セキュリティ上、画面共有ではアプリの内容は非表示となります"）およびPayPay・金融機関アプリの利用制限が100%発生しません。
             - Android 14/15 準拠: `FloatingBubbleService` の foregroundServiceType を `specialUse` とし、`PROPERTY_SPECIAL_USE_FGS_SUBTYPE` を正式定義。
-            - 起動時は画面共有ダイアログを一切出さず、「他のアプリの上に重ねて表示」と「画像アクセス」権限のみで即座にオーバーレイを起動します。
+            - 起動時は画面共有ダイアログを一切出さず、「他のアプリの上に重ねて表示」と「画像アクセス」権限のみで即座にオーバーレイを起動。
 
             ### 📸 【ルートA：OS標準スクリーンショット20秒自動検知（MediaStore + ContentObserver）】
             - Android標準のスクリーンショット（電源＋音量下など）を自動検知。OS黒塗り保護を根本回避。
@@ -72,7 +76,7 @@ jobs:
             - **通信エラーの直接表示**: Gemini APIとの通信失敗時（HTTP 400 / 403 / 429等）に、ダミー返信で隠さず、エラーコードと詳細メッセージをポップアップ上の赤色アラートバナーに直接可視化。
 
             ### 🎛️ 【画面端バブル ＆ 画面下部バー（4つの即答モード）】
-            - **💬 返信提案**: 相手のトーンに合わせた高EQなスマート返信案
+            - **💬 返信提案**: 相手のトーンに合わせた高EQなスマート返信案（ざっくばらん本音対応）
             - **📅 日程調整**: 神奈川（厚木・茅ヶ崎・湘南・海老名・横浜）限定のスマートなお誘い（東京提案は完全禁止）
             - **💡 話題提案**: 相手の興味を惹きつける会話のきっかけ・質問
             - **🔍 ムード分析**: 相手の心理状態・好感度分析と戦略的返信プラン
@@ -81,7 +85,8 @@ jobs:
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v1.9.0.apk
+            app/build/outputs/apk/release/line-ai-reply-v1.9.1.apk
+
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

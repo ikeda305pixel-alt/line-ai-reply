@@ -405,7 +405,7 @@ class SmartChatAssistant(
                 - 案1 (🎯 即答/ストレート): 相手の発言への素直で気持ちのいい回答
                 - 案2 (😄 共感/ノリ良く): 相手の気持ちや話に強く共感する返し
                 - 案3 (💬 質問/話題広げ): 会話が弾む自然な質問を添えた返し
-                - 案4 (✨ 代案/ポジティブ): 提案やポジティブな代案を添えた返し
+                - 案4 (😄 ざっくばらん/本音): 気取らない等身大の本音やぶっちゃけトーク、飾らない親近感を添えたざっくばらんな返し
             """.trimIndent()
 
             AssistantMode.SCHEDULE -> """
@@ -444,12 +444,12 @@ class SmartChatAssistant(
                 SmartReplyOption("🎯 丁寧・即答", "ご連絡ありがとうございます！ぜひそちらでお願いいたします。"),
                 SmartReplyOption("😄 丁寧・共感", "本当ですね！とても楽しみにしています✨"),
                 SmartReplyOption("💬 丁寧・質問", "承知いたしました！ちなみに何時頃がご都合よろしいでしょうか？"),
-                SmartReplyOption("🙅‍♂️ 丁寧・代案", "申し訳ありません、その日は少し難しく…別の日程はいかがでしょうか？")
+                SmartReplyOption("😄 丁寧・ざっくばらん", "ぶっちゃけ私もすごく気になってました笑！ぜひご一緒させてください✨")
             ) else listOf(
                 SmartReplyOption("🎯 即答・ストレート", "了解！楽しみに待ってるね😊"),
                 SmartReplyOption("😄 共感・ノリ良く", "それめっちゃいいね！詳しく教えて笑"),
                 SmartReplyOption("💬 質問・話題広げ", "そうなんだ！ちなみに何時くらいが都合いい？"),
-                SmartReplyOption("✨ 代案・ポジティブ", "その日はちょっと予定あって…来週どう？")
+                SmartReplyOption("😄 ざっくばらん・本音", "ぶっちゃけそれめっちゃ最高じゃん笑！詳しく聞かせて😂")
             )
             AssistantMode.SCHEDULE -> if (isPolite) listOf(
                 SmartReplyOption("📅 ランチ・お茶", "今度の週末、茅ヶ崎や辻堂あたりの落ち着いたカフェでランチでもいかがですか？☕"),
