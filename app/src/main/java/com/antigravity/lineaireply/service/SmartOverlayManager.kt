@@ -318,12 +318,26 @@ class SmartOverlayManager(private val context: Context) {
         }
     }
 
+    private fun safeUpdateViewLayout(view: View?, params: WindowManager.LayoutParams?) {
+        if (view == null || params == null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && !view.isAttachedToWindow) {
+            return
+        }
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "View not attached to WindowManager when updating layout: ${e.message}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed updating view layout: ${e.message}")
+        }
+    }
+
     // ==========================================
     // 3. Window Focus Trick for Clipboard Reading
     // ==========================================
     fun readClipboardWithFocusTrick(targetView: View?, onResult: (String?) -> Unit) {
         val v = targetView ?: bubbleView ?: bottomBarView ?: cardView
-        if (v == null) {
+        if (v == null || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && !v.isAttachedToWindow)) {
             onResult(readClipboardDirect())
             return
         }
@@ -340,8 +354,8 @@ class SmartOverlayManager(private val context: Context) {
         v.isFocusable = true
         v.isFocusableInTouchMode = true
 
+        safeUpdateViewLayout(v, params)
         try {
-            windowManager.updateViewLayout(v, params)
             v.requestFocus()
         } catch (e: Exception) {
             Log.w(TAG, "Failed requesting focus: ${e.message}")
@@ -366,27 +380,46 @@ class SmartOverlayManager(private val context: Context) {
 
             // Restore original flags
             params.flags = originalFlags
-            try {
-                windowManager.updateViewLayout(v, params)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed restoring flags: ${e.message}")
-            }
+            safeUpdateViewLayout(v, params)
 
             onResult(clipText)
         }
 
+        val attachListener = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {}
+            override fun onViewDetachedFromWindow(view: View) {
+                view.removeOnAttachStateChangeListener(this)
+                retrieveAndRestore()
+            }
+        }
+        v.addOnAttachStateChangeListener(attachListener)
+
         // Detect window focus change or fallback after 100ms
         focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
             if (hasFocus) {
+                v.removeOnAttachStateChangeListener(attachListener)
                 retrieveAndRestore()
             }
         }
         v.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
 
         v.postDelayed({
+            v.removeOnAttachStateChangeListener(attachListener)
             retrieveAndRestore()
         }, 100)
     }
+
+    /**
+     * Coroutine-friendly suspend version of readClipboardWithFocusTrick.
+     */
+    suspend fun readClipboardWithFocusTrickSuspend(targetView: View? = null): String? =
+        kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            readClipboardWithFocusTrick(targetView) { result ->
+                if (continuation.isActive) {
+                    continuation.resumeWith(Result.success(result))
+                }
+            }
+        }
 
     private fun readClipboardDirect(): String? {
         return try {

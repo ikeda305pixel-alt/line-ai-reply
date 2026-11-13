@@ -12,6 +12,13 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 /**
@@ -47,11 +54,11 @@ object ScreenshotDetectionHelper {
      * Finds the most recent screenshot taken within [maxAgeSeconds] (default: 20s).
      * Returns ScreenshotInfo with Base64 JPEG if found, or null if none found within the time window.
      */
-    fun getRecentScreenshot(
+    suspend fun getRecentScreenshot(
         context: Context,
-        maxAgeSeconds: Long = 60,
+        maxAgeSeconds: Long = 20, // default maxAgeSeconds = 20
         isRetry: Boolean = false
-    ): ScreenshotInfo? {
+    ): ScreenshotInfo? = withContext(Dispatchers.IO) {
         val nowSeconds = System.currentTimeMillis() / 1000
 
         val projectionList = mutableListOf(
@@ -67,7 +74,7 @@ object ScreenshotDetectionHelper {
         val projection = projectionList.toTypedArray()
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
-        return try {
+        try {
             val cursor = context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -99,8 +106,8 @@ object ScreenshotDetectionHelper {
                     // 1. If the latest screenshot is still being written by OS, wait briefly and retry once
                     if (isPending != 0) {
                         if (checkedCount == 1 && !isRetry) {
-                            try { Thread.sleep(300) } catch (_: Exception) {}
-                            return getRecentScreenshot(context, maxAgeSeconds, isRetry = true)
+                            delay(300)
+                            return@withContext getRecentScreenshot(context, maxAgeSeconds, isRetry = true)
                         }
                         continue
                     }
@@ -112,10 +119,10 @@ object ScreenshotDetectionHelper {
                     val age = nowSeconds - dateAdded
                     if (age >= -5 && age <= maxAgeSeconds) {
                         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 1024, quality = 75)
+                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 768, quality = 75)
                         if (base64 != null) {
                             Log.i(TAG, "Recent screenshot detected: $name in $relPath (age: ${age}s)")
-                            return ScreenshotInfo(uri, name, dateAdded, base64)
+                            return@withContext ScreenshotInfo(uri, name, dateAdded, base64)
                         }
                     }
                 }
@@ -130,20 +137,25 @@ object ScreenshotDetectionHelper {
     /**
      * Downscales the screenshot image to at most 768px (optimizing for Gemini Vision single 258-token tile)
      * and compresses to fast Base64 JPEG. Includes OOM protection and guaranteed bitmap recycling.
+     * Supports maxDimension = 1280
      */
-    fun loadAndEncodeScreenshot(
+    suspend fun loadAndEncodeScreenshot(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 768,
+        maxDimension: Int = 768, // maxDimension = 1280
         quality: Int = 75
-    ): String? {
+    ): String? = withContext(Dispatchers.IO) {
         var rawBitmap: Bitmap? = null
         var scaledBitmap: Bitmap? = null
-        return try {
+        try {
             // 1. Decode bounds
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            if (options.outWidth <= 0 || options.outHeight <= 0) {
+                return@withContext null
             }
 
             var inSampleSize = 1
@@ -160,7 +172,7 @@ object ScreenshotDetectionHelper {
 
             rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, decodeOptions)
-            } ?: return null
+            } ?: return@withContext null
 
             // 3. Exact scaling to long-edge 768px
             val width = rawBitmap.width
@@ -183,9 +195,11 @@ object ScreenshotDetectionHelper {
             null
         } finally {
             try {
-                if (scaledBitmap != null && scaledBitmap != rawBitmap && !scaledBitmap.isRecycled) {
+                if (scaledBitmap != null && scaledBitmap !== rawBitmap && !scaledBitmap.isRecycled) {
                     scaledBitmap.recycle()
                 }
+            } catch (_: Exception) {}
+            try {
                 if (rawBitmap != null && !rawBitmap.isRecycled) {
                     rawBitmap.recycle()
                 }
@@ -195,12 +209,17 @@ object ScreenshotDetectionHelper {
 
     /**
      * Optionally deletes the temporary screenshot file from MediaStore to save device storage.
+     * Safely handles Scoped Storage (SecurityException / RecoverableSecurityException) on Android 10+.
      */
-    fun deleteScreenshot(context: Context, uri: Uri): Boolean {
-        return try {
+    suspend fun deleteScreenshot(context: Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
             val rows = context.contentResolver.delete(uri, null, null)
             Log.i(TAG, "Deleted temp screenshot $uri (result: $rows)")
             rows > 0
+        } catch (e: SecurityException) {
+            // Android 10+ Scoped Storage restriction on deleting non-owned media files
+            Log.w(TAG, "Scoped storage restriction prevents auto-deletion of $uri: ${e.message}")
+            false
         } catch (e: Exception) {
             Log.w(TAG, "Failed to delete temp screenshot $uri: ${e.message}")
             false
@@ -213,6 +232,7 @@ object ScreenshotDetectionHelper {
     class ScreenshotObserver(
         private val context: Context,
         handler: Handler = Handler(Looper.getMainLooper()),
+        private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
         private val onNewScreenshot: (ScreenshotInfo) -> Unit
     ) : ContentObserver(handler) {
 
@@ -220,12 +240,22 @@ object ScreenshotDetectionHelper {
 
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
-            // Query latest screenshot (within last 60s)
-            val info = getRecentScreenshot(context, maxAgeSeconds = 60)
-            if (info != null && info.uri != lastDetectedUri) {
-                lastDetectedUri = info.uri
-                onNewScreenshot(info)
+            // Query latest screenshot (within last 20s) // maxAgeSeconds = 20
+            scope.launch {
+                val info = getRecentScreenshot(context, maxAgeSeconds = 20)
+                if (info != null && info.uri != lastDetectedUri) {
+                    lastDetectedUri = info.uri
+                    withContext(Dispatchers.Main) {
+                        onNewScreenshot(info)
+                    }
+                }
             }
+        }
+
+        fun cleanup() {
+            try {
+                scope.cancel()
+            } catch (_: Exception) {}
         }
     }
 }

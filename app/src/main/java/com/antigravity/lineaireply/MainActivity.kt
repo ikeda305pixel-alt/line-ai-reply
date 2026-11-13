@@ -32,6 +32,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var guard: FreeTierGuard
     private lateinit var memoryManager: ConversationMemoryManager
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(this, "通知権限が許可されました ✅", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "通知が無効の場合、フォアグラウンドサービス通知が表示されない場合があります", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private val mediaPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -103,7 +113,7 @@ class MainActivity : AppCompatActivity() {
         // Request notification permission for Android 13+ (for foreground service notification)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
@@ -169,8 +179,12 @@ class MainActivity : AppCompatActivity() {
             }
 
             updateUIState()
-            btnStartBubble.postDelayed({ updateUIState() }, 500)
-            btnStartBubble.postDelayed({ updateUIState() }, 1200)
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(500)
+                updateUIState()
+                kotlinx.coroutines.delay(700)
+                updateUIState()
+            }
         }
 
         btnStopBubble.setOnClickListener {

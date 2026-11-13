@@ -41,19 +41,19 @@
 
         <TextView
             android:id="@+id/btnClose"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:gravity="center"
             android:text="✕"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
     </LinearLayout>
 
     <!-- 4 Mode Action Selector Bar (返信提案 / 日程調整 / 話題提案 / ムード分析) -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
         android:scrollbars="none">
 
         <LinearLayout
@@ -64,46 +64,50 @@
             <Button
                 android:id="@+id/btnModeReply"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_overlay_btn"
                 android:backgroundTint="@color/line_green"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="12dp"
                 android:text="💬 返信提案"
                 android:textColor="@color/white"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnModeSchedule"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_overlay_btn_outline"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="12dp"
                 android:text="📅 日程調整"
                 android:textColor="@color/text_primary"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnModeTopic"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:layout_marginEnd="4dp"
                 android:background="@drawable/bg_overlay_btn_outline"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="12dp"
                 android:text="💡 話題提案"
                 android:textColor="@color/text_primary"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnModeMood"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:background="@drawable/bg_overlay_btn_outline"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="12dp"
                 android:text="🔍 ムード分析"
                 android:textColor="@color/text_primary"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
         </LinearLayout>
     </HorizontalScrollView>
 
@@ -199,7 +203,7 @@
             <EditText
                 android:id="@+id/editMiniPrompt"
                 android:layout_width="0dp"
-                android:layout_height="38dp"
+                android:layout_height="48dp"
                 android:layout_weight="1"
                 android:background="@android:drawable/edit_text"
                 android:hint="例: 明日の予定 / カフェお誘い"
@@ -211,80 +215,95 @@
             <Button
                 android:id="@+id/btnMiniGenerate"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:minWidth="48dp"
                 android:layout_marginStart="6dp"
                 android:background="@drawable/bg_overlay_btn"
                 android:backgroundTint="@color/line_green"
+                android:paddingHorizontal="12dp"
                 android:text="🚀 AI生成"
                 android:textColor="@color/white"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 4 Selectable Reply Options -->
-    <LinearLayout
-        android:id="@+id/optionsLayout"
+    <!-- 4 Selectable Reply Options wrapped in ScrollView for landscape and long content -->
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="vertical">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="6dp"
+        android:fillViewport="true"
+        android:scrollbars="vertical">
 
-        <Button
-            android:id="@+id/btnOpt1"
+        <LinearLayout
+            android:id="@+id/optionsLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/bg_overlay_btn_outline"
-            android:gravity="start|center_vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
-            android:text="😊 案1"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
+            android:orientation="vertical">
 
-        <Button
-            android:id="@+id/btnOpt2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/bg_overlay_btn_outline"
-            android:gravity="start|center_vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
-            android:text="✨ 案2"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/btnOpt1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
+                android:gravity="start|center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="😊 案1"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
 
-        <Button
-            android:id="@+id/btnOpt3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/bg_overlay_btn_outline"
-            android:gravity="start|center_vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
-            android:text="😄 案3"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/btnOpt2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
+                android:gravity="start|center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="✨ 案2"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
 
-        <Button
-            android:id="@+id/btnOpt4"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="6dp"
-            android:background="@drawable/bg_overlay_btn_outline"
-            android:gravity="start|center_vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="8dp"
-            android:text="☕ 案4"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp" />
-    </LinearLayout>
+            <Button
+                android:id="@+id/btnOpt3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
+                android:gravity="start|center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="😄 案3"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnOpt4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/bg_overlay_btn_outline"
+                android:gravity="start|center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="☕ 案4"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
 
     <!-- Bottom Actions -->
     <LinearLayout

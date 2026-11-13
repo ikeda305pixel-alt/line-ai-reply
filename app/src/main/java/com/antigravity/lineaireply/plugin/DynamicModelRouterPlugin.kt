@@ -25,14 +25,14 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         const val TAG = "DynamicModelRouter"
 
         val CANDIDATE_MODELS = listOf(
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite",
-            "gemma-4-26b-a4b-it",
-            "gemini-3.1-flash-image-preview",
-            "gemini-3-flash-preview",
-            "gemini-3.8-flash",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-2.5-flash",
             "gemini-flash-latest",
-            "gemini-3.5-flash"
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite"
         )
 
         @Volatile
@@ -69,53 +69,51 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                 .addHeader("x-goog-api-key", cleanKey)
                 .get()
                 .build()
-            val resp = client.newCall(req).execute()
-            if (resp.isSuccessful) {
-                val body = resp.body?.string() ?: ""
-                val root = JSONObject(body)
-                val modelsArray = root.optJSONArray("models") ?: return@withContext emptyList()
-                val result = mutableListOf<String>()
-                for (i in 0 until modelsArray.length()) {
-                    val mObj = modelsArray.getJSONObject(i)
-                    val name = mObj.optString("name", "").removePrefix("models/")
-                    val methods = mObj.optJSONArray("supportedGenerationMethods")
-                    var canGenerate = false
-                    if (methods != null) {
-                        for (j in 0 until methods.length()) {
-                            if (methods.getString(j).equals("generateContent", ignoreCase = true)) {
-                                canGenerate = true
-                                break
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val root = JSONObject(body)
+                    val modelsArray = root.optJSONArray("models") ?: return@withContext emptyList()
+                    val result = mutableListOf<String>()
+                    for (i in 0 until modelsArray.length()) {
+                        val mObj = modelsArray.getJSONObject(i)
+                        val name = mObj.optString("name", "").removePrefix("models/")
+                        val methods = mObj.optJSONArray("supportedGenerationMethods")
+                        var canGenerate = false
+                        if (methods != null) {
+                            for (j in 0 until methods.length()) {
+                                if (methods.getString(j).equals("generateContent", ignoreCase = true)) {
+                                    canGenerate = true
+                                    break
+                                }
                             }
                         }
+                        if (canGenerate && name.isNotBlank()) {
+                            result.add(name)
+                        }
                     }
-                    if (canGenerate && name.isNotBlank()) {
-                        result.add(name)
-                    }
-                }
 
-                // Sort: prioritize 3-flash-preview > 3.8-flash > 3.5-flash > flash-latest > gemma > 2.5-flash
-                result.sortWith { a, b ->
-                    fun score(m: String): Int = when {
-                        m.contains("3-flash-preview") -> 120
-                        m.contains("3.8-flash") -> 115
-                        m.contains("3.5-flash") -> 110
-                        m.contains("flash-latest") -> 105
-                        m.contains("3.1-flash") -> 100
-                        m.contains("gemma-4-26b") -> 95
-                        m.contains("2.5-flash") && !m.contains("lite") -> 85
-                        m.contains("2.0-flash") -> 75
-                        m.contains("flash-lite") -> 70
-                        m.contains("1.5-flash") -> 60
-                        m.contains("flash") -> 50
-                        m.contains("pro") -> 40
-                        else -> 10
+                    // Sort: prioritize 2.0-flash > 2.0-flash-lite > 1.5-flash > 2.5-flash > flash-latest
+                    result.sortWith { a, b ->
+                        fun score(m: String): Int = when {
+                            m == "gemini-2.0-flash" -> 120
+                            m == "gemini-2.0-flash-lite" -> 115
+                            m == "gemini-1.5-flash" -> 110
+                            m.contains("2.0-flash") -> 105
+                            m.contains("1.5-flash") -> 100
+                            m.contains("2.5-flash") -> 95
+                            m.contains("flash-latest") -> 90
+                            m.contains("flash") -> 80
+                            m.contains("pro") -> 40
+                            else -> 10
+                        }
+                        score(b) - score(a)
                     }
-                    score(b) - score(a)
+                    if (result.isNotEmpty()) {
+                        Log.i(TAG, "Discovered active models: ${result.take(4)}")
+                    }
+                    return@withContext result
                 }
-                if (result.isNotEmpty()) {
-                    Log.i(TAG, "Discovered active models: ${result.take(4)}")
-                }
-                return@withContext result
             }
         } catch (e: Exception) {
             Log.w(TAG, "ListModels call failed: ${e.message}")
@@ -173,11 +171,11 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     .post(body.toString().toRequestBody(mediaType))
                     .build()
 
-                val resp = client.newCall(req).execute()
-                val code = resp.code
-                val respStr = resp.body?.string() ?: ""
+                val (isSuccess, code, respStr) = client.newCall(req).execute().use { resp ->
+                    Triple(resp.isSuccessful, resp.code, resp.body?.string() ?: "")
+                }
 
-                if (!resp.isSuccessful) {
+                if (!isSuccess) {
                     val friendlyMsg = when (code) {
                         400 -> "HTTP 400 (無効なAPIキー): キー形式を確認してください"
                         403 -> "HTTP 403 (権限エラー): Google CloudでGenerative Language APIが有効か確認してください"
@@ -243,7 +241,6 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         }
 
         var lastError = ""
-        val startTime = System.currentTimeMillis()
         for (rawModel in modelsToTry) {
             val model = rawModel.removePrefix("models/")
             try {
@@ -258,12 +255,12 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                     .build()
 
                 val callStart = System.currentTimeMillis()
-                val resp = client.newCall(req).execute()
-                val callLatency = System.currentTimeMillis() - callStart
-                val code = resp.code
-                val respBody = resp.body?.string() ?: ""
+                val (isSuccess, code, respBody, callLatency) = client.newCall(req).execute().use { resp ->
+                    val latency = System.currentTimeMillis() - callStart
+                    Tuple4(resp.isSuccessful, resp.code, resp.body?.string() ?: "", latency)
+                }
 
-                if (resp.isSuccessful) {
+                if (isSuccess) {
                     cachedWorkingModel = model
                     return@withContext Pair(
                         true,
@@ -289,4 +286,6 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         }
         Pair(false, lastError)
     }
+
+    private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 }

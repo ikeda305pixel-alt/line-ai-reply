@@ -147,6 +147,8 @@ class FloatingBubbleService : Service() {
         return START_STICKY
     }
 
+    private var currentActionJob: Job? = null
+
     /**
      * Executes the strict priority logic:
      * 0. API Key check: If not starting with "AIzaSy", show explicit prompt in popup without dummy fallback!
@@ -158,7 +160,8 @@ class FloatingBubbleService : Service() {
      * In case of Gemini API error, display exact HTTP status code and error message directly!
      */
     private fun handleActionTrigger(mode: AssistantMode, customUserPrompt: String? = null) {
-        serviceScope.launch {
+        currentActionJob?.cancel()
+        currentActionJob = serviceScope.launch {
             val key = prefs.getString("gemini_key", "") ?: ""
             assistant.updateApiKey(key)
 
@@ -184,8 +187,9 @@ class FloatingBubbleService : Service() {
                 return@launch
             }
 
-            // Step 1: Check for recent screenshot within 60 seconds (with clock skew & pending tolerance)
-            val recentScreenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 60)
+            // Step 1: Check for recent screenshot within 20 seconds (with clock skew & pending tolerance)
+            // maxAgeSeconds = 20
+            val recentScreenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 20)
 
             if (recentScreenshot != null) {
                 lastScreenshotBase64 = recentScreenshot.base64Jpeg
@@ -247,125 +251,122 @@ class FloatingBubbleService : Service() {
                 return@launch
             }
 
-            // Step 2: Read clipboard via Window Focus Trick
-            overlayManager.readClipboardWithFocusTrick(null) { clipText ->
-                serviceScope.launch {
-                    if (!clipText.isNullOrBlank()) {
-                        lastClipboardText = clipText
-                        lastScreenshotBase64 = null
-                        lastScreenshotName = null
+            // Step 2: Read clipboard via Window Focus Trick with structured concurrency
+            val clipText = overlayManager.readClipboardWithFocusTrickSuspend()
+            if (!clipText.isNullOrBlank()) {
+                lastClipboardText = clipText
+                lastScreenshotBase64 = null
+                lastScreenshotName = null
 
-                        // Show analyzing indicator in popup immediately
-                        overlayManager.showReplies(
-                            platform = "LINE",
-                            summaryText = "📋 コピー文面を解析中...",
-                            currentMode = mode,
-                            screenshotName = null,
-                            clipboardText = clipText,
-                            alertMessage = null,
-                            options = emptyList(),
-                            onModeSelected = { newMode ->
-                                currentMode = newMode
-                                handleActionTrigger(newMode, customUserPrompt)
-                            },
-                            onSelect = {},
-                            onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays() }
-                        )
+                // Show analyzing indicator in popup immediately
+                overlayManager.showReplies(
+                    platform = "LINE",
+                    summaryText = "📋 コピー文面を解析中...",
+                    currentMode = mode,
+                    screenshotName = null,
+                    clipboardText = clipText,
+                    alertMessage = null,
+                    options = emptyList(),
+                    onModeSelected = { newMode ->
+                        currentMode = newMode
+                        handleActionTrigger(newMode, customUserPrompt)
+                    },
+                    onSelect = {},
+                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
+                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+                    onDismiss = { restoreOverlays() }
+                )
 
-                        val result = assistant.generateFromClipboard(
-                            clipboardText = clipText,
-                            mode = mode,
-                            userPromptNote = customUserPrompt
-                        )
+                val result = assistant.generateFromClipboard(
+                    clipboardText = clipText,
+                    mode = mode,
+                    userPromptNote = customUserPrompt
+                )
 
-                        val hasError = result.options.isEmpty() && result.errorDetails != null
-                        val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
+                val hasError = result.options.isEmpty() && result.errorDetails != null
+                val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
 
-                        overlayManager.showReplies(
-                            platform = "LINE",
-                            summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
-                            currentMode = mode,
-                            screenshotName = null,
-                            clipboardText = clipText,
-                            alertMessage = alertMsg,
-                            options = result.options,
-                            onModeSelected = { newMode ->
-                                currentMode = newMode
-                                handleActionTrigger(newMode, customUserPrompt)
-                            },
-                            onSelect = {},
-                            onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays(1200L) }
-                        )
-                    } else if (!customUserPrompt.isNullOrBlank()) {
-                        // User typed directly into mini input
-                        overlayManager.showReplies(
-                            platform = "LINE",
-                            summaryText = "✍️ メモから生成中...",
-                            currentMode = mode,
-                            screenshotName = null,
-                            clipboardText = "メモ: $customUserPrompt",
-                            alertMessage = null,
-                            options = emptyList(),
-                            onModeSelected = { newMode ->
-                                currentMode = newMode
-                                handleActionTrigger(newMode, customUserPrompt)
-                            },
-                            onSelect = {},
-                            onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays(1200L) }
-                        )
+                overlayManager.showReplies(
+                    platform = "LINE",
+                    summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
+                    currentMode = mode,
+                    screenshotName = null,
+                    clipboardText = clipText,
+                    alertMessage = alertMsg,
+                    options = result.options,
+                    onModeSelected = { newMode ->
+                        currentMode = newMode
+                        handleActionTrigger(newMode, customUserPrompt)
+                    },
+                    onSelect = {},
+                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
+                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+                    onDismiss = { restoreOverlays(1200L) }
+                )
+            } else if (!customUserPrompt.isNullOrBlank()) {
+                // User typed directly into mini input
+                overlayManager.showReplies(
+                    platform = "LINE",
+                    summaryText = "✍️ メモから生成中...",
+                    currentMode = mode,
+                    screenshotName = null,
+                    clipboardText = "メモ: $customUserPrompt",
+                    alertMessage = null,
+                    options = emptyList(),
+                    onModeSelected = { newMode ->
+                        currentMode = newMode
+                        handleActionTrigger(newMode, customUserPrompt)
+                    },
+                    onSelect = {},
+                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
+                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+                    onDismiss = { restoreOverlays(1200L) }
+                )
 
-                        val result = assistant.generateFromUserNote(
-                            userPromptNote = customUserPrompt,
-                            mode = mode
-                        )
+                val result = assistant.generateFromUserNote(
+                    userPromptNote = customUserPrompt,
+                    mode = mode
+                )
 
-                        val hasError = result.options.isEmpty() && result.errorDetails != null
-                        val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
+                val hasError = result.options.isEmpty() && result.errorDetails != null
+                val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
 
-                        overlayManager.showReplies(
-                            platform = "LINE",
-                            summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
-                            currentMode = mode,
-                            screenshotName = null,
-                            clipboardText = "メモ: $customUserPrompt",
-                            alertMessage = alertMsg,
-                            options = result.options,
-                            onModeSelected = { newMode ->
-                                currentMode = newMode
-                                handleActionTrigger(newMode, customUserPrompt)
-                            },
-                            onSelect = {},
-                            onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays(1200L) }
-                        )
-                    } else {
-                        // Step 3: Neither screenshot nor clipboard found -> Show mini input field
-                        overlayManager.showReplies(
-                            platform = "LINE",
-                            summaryText = "LINE AI [${mode.title}] - 入力待ち",
-                            currentMode = mode,
-                            screenshotName = null,
-                            clipboardText = null,
-                            alertMessage = null,
-                            options = emptyList(),
-                            onModeSelected = { newMode ->
-                                currentMode = newMode
-                                handleActionTrigger(newMode)
-                            },
-                            onSelect = {},
-                            onRegenerate = { handleActionTrigger(mode) },
-                            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                            onDismiss = { restoreOverlays(1200L) }
-                        )
-                    }
-                }
+                overlayManager.showReplies(
+                    platform = "LINE",
+                    summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
+                    currentMode = mode,
+                    screenshotName = null,
+                    clipboardText = "メモ: $customUserPrompt",
+                    alertMessage = alertMsg,
+                    options = result.options,
+                    onModeSelected = { newMode ->
+                        currentMode = newMode
+                        handleActionTrigger(newMode, customUserPrompt)
+                    },
+                    onSelect = {},
+                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
+                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+                    onDismiss = { restoreOverlays(1200L) }
+                )
+            } else {
+                // Step 3: Neither screenshot nor clipboard found -> Show mini input field
+                overlayManager.showReplies(
+                    platform = "LINE",
+                    summaryText = "LINE AI [${mode.title}] - 入力待ち",
+                    currentMode = mode,
+                    screenshotName = null,
+                    clipboardText = null,
+                    alertMessage = null,
+                    options = emptyList(),
+                    onModeSelected = { newMode ->
+                        currentMode = newMode
+                        handleActionTrigger(newMode)
+                    },
+                    onSelect = {},
+                    onRegenerate = { handleActionTrigger(mode) },
+                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+                    onDismiss = { restoreOverlays(1200L) }
+                )
             }
         }
     }
@@ -461,6 +462,7 @@ class FloatingBubbleService : Service() {
             serviceScope.cancel()
         } catch (_: Exception) {}
         screenshotObserver?.let {
+            it.cleanup()
             try {
                 contentResolver.unregisterContentObserver(it)
             } catch (_: Exception) {}

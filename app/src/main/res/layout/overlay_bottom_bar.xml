@@ -13,8 +13,9 @@
     <!-- Drag Handle / Indicator (Wider touch area) -->
     <TextView
         android:id="@+id/btnBottomBarDrag"
-        android:layout_width="32dp"
-        android:layout_height="36dp"
+        android:layout_width="36dp"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
         android:gravity="center"
         android:text="⋮⋮"
         android:textColor="#94A3B8"
@@ -43,7 +44,8 @@
         <Button
             android:id="@+id/btnBarReply"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="@color/line_green"
@@ -56,7 +58,8 @@
         <Button
             android:id="@+id/btnBarSchedule"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#0EA5E9"
@@ -69,7 +72,8 @@
         <Button
             android:id="@+id/btnBarTopic"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginEnd="4dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#F59E0B"
@@ -82,7 +86,8 @@
         <Button
             android:id="@+id/btnBarMood"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_marginEnd="5dp"
             android:background="@drawable/bg_overlay_btn"
             android:backgroundTint="#8B5CF6"
@@ -95,8 +100,9 @@
     <!-- Minimize / Expand Toggle -->
     <TextView
         android:id="@+id/btnBarMinimize"
-        android:layout_width="26dp"
-        android:layout_height="36dp"
+        android:layout_width="32dp"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
         android:gravity="center"
         android:text="◀"
         android:textColor="#64748B"
@@ -105,8 +111,9 @@
     <!-- Close button -->
     <TextView
         android:id="@+id/btnBarClose"
-        android:layout_width="26dp"
-        android:layout_height="36dp"
+        android:layout_width="32dp"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
         android:layout_marginStart="2dp"
         android:gravity="center"
         android:text="✕"

@@ -321,12 +321,13 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                         .build()
 
                     try {
-                        val resp = client.newCall(req).execute()
-                        if (resp.isSuccessful) {
-                            respStr = resp.body?.string() ?: ""
-                            isSuccessful = true
-                            SmartChatAssistant.cachedWorkingModel = model
-                            break
+                        client.newCall(req).execute().use { resp ->
+                            if (resp.isSuccessful) {
+                                respStr = resp.body?.string() ?: ""
+                                isSuccessful = true
+                                SmartChatAssistant.cachedWorkingModel = model
+                                break
+                            }
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Analysis model $model failed: ${e.message}")
@@ -407,8 +408,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
             val existTail = existing.takeLast(overlapLen)
             val incHead = incoming.take(overlapLen)
             if (isSequenceMatch(existTail, incHead)) {
-                val merged = existing + incoming.drop(overlapLen)
-                return merged.takeLast(MAX_ACCUMULATED_TURNS)
+                return (existing + incoming.drop(overlapLen)).takeLast(MAX_ACCUMULATED_TURNS)
             }
         }
 
@@ -417,38 +417,23 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
             val incTail = incoming.takeLast(overlapLen)
             val existHead = existing.take(overlapLen)
             if (isSequenceMatch(incTail, existHead)) {
-                val merged = incoming.dropLast(overlapLen) + existing
-                return merged.takeLast(MAX_ACCUMULATED_TURNS)
+                return (incoming.dropLast(overlapLen) + existing).takeLast(MAX_ACCUMULATED_TURNS)
             }
         }
 
-        // Case 3: Incoming is a contiguous sub-sequence inside existing (already fully recorded)
+        // Case 3: Fully contained sub-sequence check
         if (existing.size >= incoming.size) {
             for (start in 0..(existing.size - incoming.size)) {
-                val sub = existing.subList(start, start + incoming.size)
-                if (isSequenceMatch(sub, incoming)) {
+                if (isSequenceMatch(existing.subList(start, start + incoming.size), incoming)) {
                     return existing
                 }
             }
         }
 
-        // Case 4: Existing is a contiguous sub-sequence inside incoming
-        if (incoming.size >= existing.size) {
-            for (start in 0..(incoming.size - existing.size)) {
-                val sub = incoming.subList(start, start + existing.size)
-                if (isSequenceMatch(sub, existing)) {
-                    return incoming.takeLast(MAX_ACCUMULATED_TURNS)
-                }
-            }
-        }
-
-        // Fallback: If no contiguous overlap (jump in scroll), merge preserving chronological order and deduplicating
+        // Fallback: Append non-duplicate messages preserving order
         val mergedList = existing.toMutableList()
         for (turn in incoming) {
-            val alreadyExists = mergedList.any {
-                it.isPartner == turn.isPartner && it.text.trim() == turn.text.trim()
-            }
-            if (!alreadyExists) {
+            if (mergedList.none { it.isPartner == turn.isPartner && it.text.trim() == turn.text.trim() }) {
                 mergedList.add(turn)
             }
         }

@@ -29,11 +29,12 @@ jobs:
         with:
           gradle-version: '8.2'
 
-      - name: Build with Gradle
+      - name: Run Unit Tests & Build Release APK
         run: |
+          gradle testDebugUnitTest --stacktrace
           gradle assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply.apk
-          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.2.apk
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/line-ai-reply-v2.0.3.apk
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -46,22 +47,27 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.2
-          name: LINE & Bumble AI Reply Assistant v2.0.2 (外国人・英語話者への100%ネイティブ英語返信完全保証)
+          tag_name: v2.0.3
+          name: LINE & Bumble AI Reply Assistant v2.0.3 (QA完全検品＆全面リファクタリング)
           body: |
-            ## LINE & Bumble AI返信アシスタント v2.0.2 (English Speaker Support)
+            ## LINE & Bumble AI返信アシスタント v2.0.3 (QA Inspected & Refactored)
 
-            ### 🌍 1. 【外国人・英語話者への英語返信を完全実装（日本語返信厳禁）】
-            - **スクショ画像認識（Gemini Vision）での言語自動判定**: 相手の最新メッセージが英語、または相手が外国人/バイリンガル、Bumble等のプロフィール・チャットが英語である場合、**返信案4つをすべて100%自然でチャーミングな日常会話のネイティブ英語（タメ口・短文・スラング）で作成**するルールをプロンプト最上位に厳格設定。
-            - **クリップボード・テキスト返信での英語自動検知**: ラテン文字比率や外国キーワードを自動検知し、英語話者の場合は100%英語で返信案を生成。
-            - **全4モード（返信・日程・話題・分析）の英語専用プロンプト完備**: 神奈川エリア（Yokohama, Shonan, Chigasaki, Ebina）のスマートな提案も含め、自然な英語表現に完全対応。
-            - **オフライン/フォールバック時の英語対応**: 英語相手の通信エラー時にも日本語が出ず、英語の高品質フォールバック候補を表示。
+            ### 🛡️ 1. Adversarial QA & Staff SWE 監査に基づく抜本修正
+            - **短文英語挨拶の判定漏れ解消**: `"Hi"`, `"Hey"`, `"Yo"`, `"Ok"`, `"No"`, `"Yes"`, `"GM"`, `"GN"` などの短文も100%英語話者と判定し、確実にネイティブ英語で返信。
+            - **Bumble等のUIノイズ排除 & Vision統合**: スクショ内の「マッチしました」「メッセージ」「〜km先」等の日本語UIを無視し、相手の吹き出し・Bio本文の言語のみを基準にするよう `ChatPromptBuilder` へ責務分離・刷新。
+            - **記憶・俺スタイル・LINE誘導の完全再配線**: `ConversationMemoryManager` の相手カルテ・自分スタイルおよび自然なLINE誘導リンクを全経路（スクショ/クリップボード/メモ）に統合。
+
+            ### ⚡ 2. パフォーマンス・安定性・UI/UX全面強化
+            - **ANR/プチフリ撲滅**: スクショ読み込み・Bitmapリサイズ・Base64化を完全に `Dispatchers.IO` へオフロードし、使用後Bitmapを即時 `recycle()` 解放。
+            - **連打排他制御 & クラッシュ防止**: 連続タップ時の多重API呼び出し防止（`currentActionJob?.cancel()`）、Focus Trick の `isAttachedToWindow` ガード、OkHttpレスポンスの `.use` クローズ徹底。
+            - **実在安定モデル優先 & フォールバック確約**: 実在モデル（`gemini-2.0-flash` 等）優先化と、通信失敗時の高品質フォールバック4案表示を復元。
+            - **片手エルゴノミクス改善**: 返信カードを `ScrollView` 対応し、全操作ボタンの最小タップ領域を 48dp 以上に拡大。
 
             ### 🔒 【固定署名キーストアによる直接「更新」】
             - 固定キーストア署名（release.keystore）のため、アンインストール不要でそのまま「更新」可能です。
           files: |
             app/build/outputs/apk/release/line-ai-reply.apk
-            app/build/outputs/apk/release/line-ai-reply-v2.0.2.apk
+            app/build/outputs/apk/release/line-ai-reply-v2.0.3.apk
 
           make_latest: true
         env:
