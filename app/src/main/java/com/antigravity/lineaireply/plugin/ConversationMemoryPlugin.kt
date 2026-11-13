@@ -326,9 +326,9 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                                 respStr = resp.body?.string() ?: ""
                                 isSuccessful = true
                                 SmartChatAssistant.cachedWorkingModel = model
-                                break
                             }
                         }
+                        if (isSuccessful) break
                     } catch (e: Exception) {
                         Log.w(TAG, "Analysis model $model failed: ${e.message}")
                     }
