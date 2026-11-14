@@ -114,4 +114,54 @@ class LanguageDetectionTest {
             textPromptNoInvite.contains("厚木") && textPromptNoInvite.contains("茅ヶ崎") && textPromptNoInvite.contains("東京禁止")
         )
     }
+
+    @Test
+    fun testVisionPromptContextUnderstandingAndUnrepliedBatchRules() {
+        val visionPrompt = ChatPromptBuilder.buildPromptForVision(
+            mode = AssistantMode.REPLY,
+            userPromptNote = null,
+            includeLineInvite = true
+        )
+
+        // 1. Must NOT contain wrongful context cutoff phrases like "過去ログは無視"
+        assertFalse(
+            "Vision prompt must NOT contain '過去ログは無視'",
+            visionPrompt.contains("過去ログは無視")
+        )
+
+        // 2. Must contain rule to read conversation flow / full context
+        assertTrue(
+            "Vision prompt must instruct model to read conversation flow and whole context",
+            visionPrompt.contains("会話の流れを読み取る") &&
+            visionPrompt.contains("画面全体") &&
+            visionPrompt.contains("時系列")
+        )
+
+        // 3. Must define reply targets as all unreplied partner messages after user's last send
+        assertTrue(
+            "Vision prompt must define reply target as all unreplied messages after user's last send",
+            visionPrompt.contains("自分の最後の送信") &&
+            visionPrompt.contains("まだ自分が返していない相手")
+        )
+
+        // 4. Must instruct model to batch consecutive messages (連投)
+        assertTrue(
+            "Vision prompt must instruct model to batch unreplied consecutive messages",
+            visionPrompt.contains("未返信の連投をまとめて返信対象にする") &&
+            visionPrompt.contains("未返信の連投すべてをまとめて受け止めて")
+        )
+
+        // 5. Must prevent dredging up already replied topics and handle self-reply edge case
+        assertTrue(
+            "Vision prompt must prohibit dredging up old topics and handle self-reply scenario",
+            visionPrompt.contains("古い話題の蒸し返し禁止") &&
+            visionPrompt.contains("自己返信せず")
+        )
+
+        // 6. Must update targetMessage format in JSON output spec
+        assertTrue(
+            "Vision prompt must specify targetMessage summary for consecutive messages",
+            visionPrompt.contains("\"targetMessage\": \"未返信の相手メッセージ群（連投時はまとめて要約。例: 『昨日カフェ行った / 今度行こうよ』）\"")
+        )
+    }
 }
