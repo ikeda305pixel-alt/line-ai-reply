@@ -67,7 +67,7 @@ class FloatingBubbleService : Service() {
     private var currentMode: AssistantMode = AssistantMode.REPLY
 
     // Cached last context
-    private var lastScreenshotBase64: String? = null
+    private var lastScreenshotUri: android.net.Uri? = null
     private var lastScreenshotName: String? = null
     private var lastClipboardText: String? = null
     private var lastUserPromptNote: String? = null
@@ -80,10 +80,21 @@ class FloatingBubbleService : Service() {
         overlayManager = SmartOverlayManager(this)
 
         val key = prefs.getString("gemini_key", "") ?: ""
-        assistant = SmartChatAssistant(key, guard, memoryManager)
+        assistant = SmartChatAssistant(key, guard, memoryManager, prefs = prefs)
 
         createNotificationChannel()
         registerScreenshotObserver()
+        warmupAssistant()
+    }
+
+    private fun warmupAssistant() {
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                assistant.warmupConnection()
+            } catch (t: Throwable) {
+                Log.d(TAG, "warmupAssistant notice: ${t.message}")
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -119,6 +130,8 @@ class FloatingBubbleService : Service() {
         }
         isRunning = true
 
+        warmupAssistant()
+
         val enableBubble = prefs.getBoolean("enable_floating_bubble", true)
         val enableBottomBar = prefs.getBoolean("enable_bottom_bar", true)
 
@@ -150,16 +163,56 @@ class FloatingBubbleService : Service() {
     private var currentActionJob: Job? = null
 
     /**
-     * Executes the strict priority logic:
-     * 0. API Key check: If not starting with "AIzaSy", show explicit prompt in popup without dummy fallback!
-     * 1. Recent screenshot (within 20s) -> "📷 スクショを解析中..." -> Multimodal Gemini Vision
-     * 2. Copied text via Window Focus Trick -> "📋 コピー文面を解析中..." -> Gemini text generation
-     * 3. Direct user typed memo -> Gemini text generation
-     * 4. Neither -> Show mini text input box with prompt in overlay
-     *
-     * In case of Gemini API error, display exact HTTP status code and error message directly!
+     * Centralized helper to render replies card and avoid duplicated code.
      */
-    private fun handleActionTrigger(mode: AssistantMode, customUserPrompt: String? = null) {
+    private fun renderOverlayCard(
+        summaryText: String,
+        mode: AssistantMode,
+        targetMessage: String? = null,
+        screenshotName: String? = null,
+        clipboardText: String? = null,
+        alertMessage: String? = null,
+        options: List<com.antigravity.lineaireply.ai.SmartReplyOption> = emptyList(),
+        customUserPrompt: String? = null,
+        dismissDelayMs: Long = 1200L
+    ) {
+        overlayManager.showReplies(
+            platform = "LINE",
+            summaryText = summaryText,
+            currentMode = mode,
+            targetMessage = targetMessage,
+            screenshotName = screenshotName,
+            clipboardText = clipboardText,
+            alertMessage = alertMessage,
+            options = options,
+            onModeSelected = { newMode ->
+                currentMode = newMode
+                handleActionTrigger(newMode, customUserPrompt, isRegenerateOrModeSwitch = true)
+            },
+            onSelect = {},
+            onRegenerate = { handleActionTrigger(mode, customUserPrompt, isRegenerateOrModeSwitch = true) },
+            onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
+            onDismiss = { restoreOverlays(dismissDelayMs) }
+        )
+    }
+
+    /**
+     * Executes the zero-latency priority logic:
+     * 0. API Key check: If not valid, show explicit prompt in popup immediately.
+     * 1. Check for recent screenshot:
+     *    Calls getRecentScreenshot(20s). If the same screenshot is cached, metadata match returns it in 0ms.
+     *    If user took a new screenshot, the new screenshot is detected instantly.
+     * 2. If recent screenshot exists -> Gemini Vision.
+     * 3. Else if in mode switch / regenerate and previous screenshotUri exists -> reload via getScreenshotByUri.
+     * 4. Else if clipboard exists (or previous clipboard preserved) -> Gemini text generation.
+     * 5. Else if userPrompt exists -> Gemini text generation.
+     * 6. Else -> Mini input prompt in overlay.
+     */
+    private fun handleActionTrigger(
+        mode: AssistantMode,
+        customUserPrompt: String? = null,
+        isRegenerateOrModeSwitch: Boolean = false
+    ) {
         currentActionJob?.cancel()
         currentActionJob = serviceScope.launch {
             val key = prefs.getString("gemini_key", "") ?: ""
@@ -167,114 +220,86 @@ class FloatingBubbleService : Service() {
 
             // Step 0: Check API Key validity
             if (!SmartChatAssistant.isValidApiKey(key)) {
-                overlayManager.showReplies(
-                    platform = "LINE",
+                renderOverlayCard(
                     summaryText = "LINE AI [${mode.title}]",
-                    currentMode = mode,
-                    screenshotName = null,
-                    clipboardText = null,
+                    mode = mode,
                     alertMessage = "⚠️ 設定画面でGemini APIキー（AIza... または AQ....）を保存してください",
-                    options = emptyList(),
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays() }
+                    customUserPrompt = customUserPrompt,
+                    dismissDelayMs = 0L
                 )
                 return@launch
             }
 
-            // Step 1: Check for recent screenshot within 20 seconds (with clock skew & pending tolerance)
-            // maxAgeSeconds = 20
-            val recentScreenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 20)
+            // Step 1: Check for screenshot (fast metadata match gives 0ms cache hit or detects brand new screenshot)
+            var screenshot = ScreenshotDetectionHelper.getRecentScreenshot(this@FloatingBubbleService, maxAgeSeconds = 20)
 
-            if (recentScreenshot != null) {
-                lastScreenshotBase64 = recentScreenshot.base64Jpeg
-                lastScreenshotName = recentScreenshot.displayName
+            // If in mode switch/regenerate and the screenshot is older than 20s, reload from lastScreenshotUri
+            if (screenshot == null && isRegenerateOrModeSwitch && lastScreenshotUri != null) {
+                screenshot = ScreenshotDetectionHelper.getScreenshotByUri(this@FloatingBubbleService, lastScreenshotUri!!)
+            }
+
+            if (screenshot != null) {
+                lastScreenshotUri = screenshot.uri
+                lastScreenshotName = screenshot.displayName
                 lastClipboardText = null
 
-                // Show analyzing indicator in popup immediately
-                overlayManager.showReplies(
-                    platform = "LINE",
+                renderOverlayCard(
                     summaryText = "📷 スクショを解析中...",
-                    currentMode = mode,
-                    targetMessage = null,
-                    screenshotName = recentScreenshot.displayName,
-                    clipboardText = null,
-                    alertMessage = null,
-                    options = emptyList(),
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    mode = mode,
+                    screenshotName = screenshot.displayName,
+                    customUserPrompt = customUserPrompt
                 )
 
                 val result = assistant.generateFromScreenshot(
-                    imageBase64 = recentScreenshot.base64Jpeg,
+                    imageBase64 = screenshot.base64Jpeg,
                     mode = mode,
                     userPromptNote = customUserPrompt
                 )
 
-                // Optional auto-deletion of temporary screenshot
                 if (prefs.getBoolean("auto_delete_screenshot", false)) {
-                    ScreenshotDetectionHelper.deleteScreenshot(this@FloatingBubbleService, recentScreenshot.uri)
+                    ScreenshotDetectionHelper.deleteScreenshot(this@FloatingBubbleService, screenshot.uri)
                 }
 
                 val hasError = result.options.isEmpty() && result.errorDetails != null
                 val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
+                val summary = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}"
 
-                overlayManager.showReplies(
-                    platform = "LINE",
-                    summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
-                    currentMode = mode,
+                renderOverlayCard(
+                    summaryText = summary,
+                    mode = mode,
                     targetMessage = result.targetMessage,
-                    screenshotName = recentScreenshot.displayName,
-                    clipboardText = null,
+                    screenshotName = screenshot.displayName,
                     alertMessage = alertMsg,
                     options = result.options,
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    customUserPrompt = customUserPrompt
                 )
                 return@launch
             }
 
-            // Step 2: Read clipboard via Window Focus Trick with structured concurrency
-            val clipText = overlayManager.readClipboardWithFocusTrickSuspend()
+            // Step 2: Clipboard reuse on mode switch or new clipboard read
+            var clipText: String? = null
+            if (isRegenerateOrModeSwitch && !lastClipboardText.isNullOrBlank()) {
+                clipText = lastClipboardText
+            } else {
+                // Show checking status immediately so user feels zero click delay
+                renderOverlayCard(
+                    summaryText = "⚡ クリップボードを確認中...",
+                    mode = mode,
+                    customUserPrompt = customUserPrompt
+                )
+                clipText = overlayManager.readClipboardWithFocusTrickSuspend()
+            }
+
             if (!clipText.isNullOrBlank()) {
                 lastClipboardText = clipText
-                lastScreenshotBase64 = null
+                lastScreenshotUri = null
                 lastScreenshotName = null
 
-                // Show analyzing indicator in popup immediately
-                overlayManager.showReplies(
-                    platform = "LINE",
+                renderOverlayCard(
                     summaryText = "📋 コピー文面を解析中...",
-                    currentMode = mode,
-                    screenshotName = null,
+                    mode = mode,
                     clipboardText = clipText,
-                    alertMessage = null,
-                    options = emptyList(),
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays() }
+                    customUserPrompt = customUserPrompt
                 )
 
                 val result = assistant.generateFromClipboard(
@@ -285,42 +310,23 @@ class FloatingBubbleService : Service() {
 
                 val hasError = result.options.isEmpty() && result.errorDetails != null
                 val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
+                val summary = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}"
 
-                overlayManager.showReplies(
-                    platform = "LINE",
-                    summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
-                    currentMode = mode,
-                    screenshotName = null,
+                renderOverlayCard(
+                    summaryText = summary,
+                    mode = mode,
                     clipboardText = clipText,
                     alertMessage = alertMsg,
                     options = result.options,
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    customUserPrompt = customUserPrompt
                 )
             } else if (!customUserPrompt.isNullOrBlank()) {
-                // User typed directly into mini input
-                overlayManager.showReplies(
-                    platform = "LINE",
+                // Step 3: User typed direct memo
+                renderOverlayCard(
                     summaryText = "✍️ メモから生成中...",
-                    currentMode = mode,
-                    screenshotName = null,
+                    mode = mode,
                     clipboardText = "メモ: $customUserPrompt",
-                    alertMessage = null,
-                    options = emptyList(),
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    customUserPrompt = customUserPrompt
                 )
 
                 val result = assistant.generateFromUserNote(
@@ -330,42 +336,22 @@ class FloatingBubbleService : Service() {
 
                 val hasError = result.options.isEmpty() && result.errorDetails != null
                 val alertMsg = if (hasError) "❌ [通信エラー] ${result.errorDetails}" else null
+                val summary = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}"
 
-                overlayManager.showReplies(
-                    platform = "LINE",
-                    summaryText = if (hasError) "LINE AI [${mode.title}] - エラー" else "LINE AI [${mode.title}] - ${result.engine}",
-                    currentMode = mode,
-                    screenshotName = null,
+                renderOverlayCard(
+                    summaryText = summary,
+                    mode = mode,
                     clipboardText = "メモ: $customUserPrompt",
                     alertMessage = alertMsg,
                     options = result.options,
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode, customUserPrompt)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode, customUserPrompt) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    customUserPrompt = customUserPrompt
                 )
             } else {
-                // Step 3: Neither screenshot nor clipboard found -> Show mini input field
-                overlayManager.showReplies(
-                    platform = "LINE",
+                // Step 4: Neither screenshot nor clipboard found -> Show mini input field
+                renderOverlayCard(
                     summaryText = "LINE AI [${mode.title}] - 入力待ち",
-                    currentMode = mode,
-                    screenshotName = null,
-                    clipboardText = null,
-                    alertMessage = null,
-                    options = emptyList(),
-                    onModeSelected = { newMode ->
-                        currentMode = newMode
-                        handleActionTrigger(newMode)
-                    },
-                    onSelect = {},
-                    onRegenerate = { handleActionTrigger(mode) },
-                    onMiniPromptSubmit = { note -> handleActionTrigger(mode, note) },
-                    onDismiss = { restoreOverlays(1200L) }
+                    mode = mode,
+                    dismissDelayMs = 1200L
                 )
             }
         }
@@ -399,6 +385,10 @@ class FloatingBubbleService : Service() {
     private fun registerScreenshotObserver() {
         try {
             val observer = ScreenshotDetectionHelper.ScreenshotObserver(this) { info ->
+                lastScreenshotUri = info.uri
+                lastScreenshotName = info.displayName
+                lastClipboardText = null
+                warmupAssistant()
                 Toast.makeText(
                     this,
                     "📸 スクショを検知しました！バブルまたは下部バーをタップしてAI返信を作成",

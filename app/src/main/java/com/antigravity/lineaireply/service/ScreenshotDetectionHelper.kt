@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
@@ -25,6 +26,8 @@ import java.io.ByteArrayOutputStream
  * Helper for OS-level standard screenshot detection and decoding via MediaStore.
  * Avoids MediaProjection (bypassing Android 15 screen-sharing protection)
  * and avoids AccessibilityService (bypassing PayPay/Banking app RASP restrictions).
+ *
+ * Includes prefetch caching, debounce, optimized queries, and OOM-protected bitmap handling.
  */
 object ScreenshotDetectionHelper {
 
@@ -36,6 +39,39 @@ object ScreenshotDetectionHelper {
         val dateAddedSeconds: Long,
         val base64Jpeg: String
     )
+
+    data class CachedScreenshot(
+        val cachedAtMs: Long,
+        val info: ScreenshotInfo
+    )
+
+    @Volatile
+    private var cachedScreenshot: CachedScreenshot? = null
+
+    /**
+     * Returns valid cached screenshot if still within maxAgeSeconds window, or null otherwise.
+     * Completes in 0ms without performing any MediaStore query or Bitmap decode.
+     */
+    fun getCachedScreenshot(maxAgeSeconds: Long = 20): ScreenshotInfo? {
+        val cached = cachedScreenshot ?: return null
+        val nowMs = System.currentTimeMillis()
+        val cacheAgeMs = nowMs - cached.cachedAtMs
+        val photoAgeSec = (nowMs / 1000) - cached.info.dateAddedSeconds
+        if (cacheAgeMs in 0..(maxAgeSeconds * 1000L) && photoAgeSec in -5..maxAgeSeconds) {
+            return cached.info
+        }
+        cachedScreenshot = null
+        return null
+    }
+
+    /**
+     * Invalidates the in-memory prefetch cache (e.g. after deletion or explicit dismiss).
+     */
+    fun invalidateCache(uri: Uri? = null) {
+        if (uri == null || cachedScreenshot?.info?.uri == uri) {
+            cachedScreenshot = null
+        }
+    }
 
     /**
      * Checks if the file name or relative path matches standard screenshot naming conventions.
@@ -51,15 +87,40 @@ object ScreenshotDetectionHelper {
     }
 
     /**
+     * Retrieves screenshot by URI, using memory cache if available, or loading on demand.
+     */
+    suspend fun getScreenshotByUri(
+        context: Context,
+        uri: Uri
+    ): ScreenshotInfo? = withContext(Dispatchers.IO) {
+        val cached = cachedScreenshot?.info
+        if (cached != null && cached.uri == uri) {
+            return@withContext cached
+        }
+        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 768, quality = 70) ?: return@withContext null
+        val info = ScreenshotInfo(uri, uri.lastPathSegment ?: "screenshot", System.currentTimeMillis() / 1000, base64)
+        cachedScreenshot = CachedScreenshot(System.currentTimeMillis(), info)
+        info
+    }
+
+    /**
      * Finds the most recent screenshot taken within [maxAgeSeconds] (default: 20s).
-     * Returns ScreenshotInfo with Base64 JPEG if found, or null if none found within the time window.
+     *
+     * 1. Performs an ultra-fast MediaStore metadata-only query (ID, NAME, DATE, IS_PENDING).
+     * 2. If the latest screenshot matches cached URI and IS_PENDING == 0, returns cached Base64 in 0ms
+     *    WITHOUT bitmap decoding.
+     * 3. If latest screenshot is pending (IS_PENDING != 0), retries up to 4 times (120ms each).
+     *    NEVER falls through to older screenshots.
+     * 4. If a newer screenshot exists, decodes it and updates cache.
      */
     suspend fun getRecentScreenshot(
         context: Context,
-        maxAgeSeconds: Long = 20, // default maxAgeSeconds = 20
-        isRetry: Boolean = false
+        maxAgeSeconds: Long = 20,
+        forceRefresh: Boolean = false,
+        retryCount: Int = 0
     ): ScreenshotInfo? = withContext(Dispatchers.IO) {
         val nowSeconds = System.currentTimeMillis() / 1000
+        val minDateAdded = nowSeconds - maxAgeSeconds - 5
 
         val projectionList = mutableListOf(
             MediaStore.Images.Media._ID,
@@ -72,14 +133,16 @@ object ScreenshotDetectionHelper {
         }
 
         val projection = projectionList.toTypedArray()
+        val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ?"
+        val selectionArgs = arrayOf(minDateAdded.toString())
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
         try {
             val cursor = context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection,
-                null,
-                null,
+                selection,
+                selectionArgs,
                 sortOrder
             )
 
@@ -94,36 +157,65 @@ object ScreenshotDetectionHelper {
                     c.getColumnIndex(MediaStore.Images.Media.IS_PENDING)
                 } else -1
 
-                var checkedCount = 0
-                while (c.moveToNext() && checkedCount < 10) {
-                    checkedCount++
+                var foundLatestScreenshot = false
+
+                while (c.moveToNext()) {
                     val id = c.getLong(idCol)
                     val name = c.getString(nameCol) ?: ""
                     val dateAdded = c.getLong(dateCol)
                     val relPath = if (pathCol != -1) c.getString(pathCol) else null
                     val isPending = if (pendingCol != -1) c.getInt(pendingCol) else 0
 
-                    // 1. If the latest screenshot is still being written by OS, wait briefly and retry once
-                    if (isPending != 0) {
-                        if (checkedCount == 1 && !isRetry) {
-                            delay(300)
-                            return@withContext getRecentScreenshot(context, maxAgeSeconds, isRetry = true)
-                        }
+                    if (!isScreenshot(name, relPath)) {
                         continue
                     }
 
-                    // 2. Must match screenshot naming/folder conventions
-                    if (!isScreenshot(name, relPath)) continue
+                    // We encountered the single latest screenshot in the database
+                    foundLatestScreenshot = true
 
-                    // 3. Verify screenshot age is within window (tolerant of clock skew up to -5s)
-                    val age = nowSeconds - dateAdded
-                    if (age >= -5 && age <= maxAgeSeconds) {
-                        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                        val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 768, quality = 75)
-                        if (base64 != null) {
-                            Log.i(TAG, "Recent screenshot detected: $name in $relPath (age: ${age}s)")
-                            return@withContext ScreenshotInfo(uri, name, dateAdded, base64)
+                    // 1. If the latest screenshot is still pending write from the OS:
+                    // Retry up to 4 times (480ms max). NEVER fall through to the previous image!
+                    if (isPending != 0) {
+                        if (retryCount < 4) {
+                            delay(120)
+                            return@withContext getRecentScreenshot(
+                                context,
+                                maxAgeSeconds = maxAgeSeconds,
+                                forceRefresh = forceRefresh,
+                                retryCount = retryCount + 1
+                            )
+                        } else {
+                            Log.w(TAG, "Latest screenshot $name is still pending after max retries. Aborting without fallthrough.")
+                            return@withContext null
                         }
+                    }
+
+                    // 2. Check time window
+                    val age = nowSeconds - dateAdded
+                    if (age < -5 || age > maxAgeSeconds) {
+                        // Latest screenshot is outside maxAgeSeconds
+                        return@withContext null
+                    }
+
+                    val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+
+                    // 3. Ultra-fast metadata match with cache
+                    val cached = cachedScreenshot
+                    if (!forceRefresh && cached != null && cached.info.uri == uri) {
+                        Log.i(TAG, "Instant cache hit with matching metadata: $name (age: ${age}s)")
+                        return@withContext cached.info
+                    }
+
+                    // 4. New screenshot or forced refresh: decode and update cache
+                    val base64 = loadAndEncodeScreenshot(context, uri, maxDimension = 768, quality = 70)
+                    if (base64 != null) {
+                        Log.i(TAG, "Recent screenshot loaded: $name in $relPath (age: ${age}s)")
+                        val info = ScreenshotInfo(uri, name, dateAdded, base64)
+                        cachedScreenshot = CachedScreenshot(System.currentTimeMillis(), info)
+                        return@withContext info
+                    } else {
+                        // Decode failed
+                        return@withContext null
                     }
                 }
                 null
@@ -136,14 +228,14 @@ object ScreenshotDetectionHelper {
 
     /**
      * Downscales the screenshot image to at most 768px (optimizing for Gemini Vision single 258-token tile)
-     * and compresses to fast Base64 JPEG. Includes OOM protection and guaranteed bitmap recycling.
-     * Supports maxDimension = 1280
+     * and compresses to fast Base64 JPEG (quality: 70).
+     * Includes RGB_565 configuration, strict OOM protection, and guaranteed bitmap recycling.
      */
     suspend fun loadAndEncodeScreenshot(
         context: Context,
         uri: Uri,
-        maxDimension: Int = 768, // maxDimension = 1280
-        quality: Int = 75
+        maxDimension: Int = 768,
+        quality: Int = 70
     ): String? = withContext(Dispatchers.IO) {
         var rawBitmap: Bitmap? = null
         var scaledBitmap: Bitmap? = null
@@ -164,7 +256,7 @@ object ScreenshotDetectionHelper {
                 inSampleSize *= 2
             }
 
-            // 2. Decode sampled bitmap
+            // 2. Decode sampled bitmap with RGB_565 for OOM protection
             val decodeOptions = BitmapFactory.Options().apply {
                 this.inSampleSize = inSampleSize
                 inPreferredConfig = Bitmap.Config.RGB_565
@@ -177,7 +269,8 @@ object ScreenshotDetectionHelper {
             // 3. Exact scaling to long-edge 768px
             val width = rawBitmap.width
             val height = rawBitmap.height
-            val scale = maxDimension.toFloat() / Math.max(width, height).toFloat()
+            val maxEdge = Math.max(width, height)
+            val scale = maxDimension.toFloat() / maxEdge.toFloat()
             scaledBitmap = if (scale < 1.0f) {
                 val sw = (width * scale).toInt().coerceAtLeast(1)
                 val sh = (height * scale).toInt().coerceAtLeast(1)
@@ -210,12 +303,18 @@ object ScreenshotDetectionHelper {
     /**
      * Optionally deletes the temporary screenshot file from MediaStore to save device storage.
      * Safely handles Scoped Storage (SecurityException / RecoverableSecurityException) on Android 10+.
+     * Invalidates in-memory cache upon successful deletion.
      */
     suspend fun deleteScreenshot(context: Context, uri: Uri): Boolean = withContext(Dispatchers.IO) {
         try {
             val rows = context.contentResolver.delete(uri, null, null)
             Log.i(TAG, "Deleted temp screenshot $uri (result: $rows)")
-            rows > 0
+            if (rows > 0) {
+                invalidateCache(uri)
+                true
+            } else {
+                false
+            }
         } catch (e: SecurityException) {
             // Android 10+ Scoped Storage restriction on deleting non-owned media files
             Log.w(TAG, "Scoped storage restriction prevents auto-deletion of $uri: ${e.message}")
@@ -228,6 +327,8 @@ object ScreenshotDetectionHelper {
 
     /**
      * ContentObserver to detect newly saved screenshots in real time.
+     * Uses cancel-and-delay debounce (200ms) to ensure write-completion events
+     * (2nd and 3rd screenshots) are NEVER dropped.
      */
     class ScreenshotObserver(
         private val context: Context,
@@ -236,26 +337,35 @@ object ScreenshotDetectionHelper {
         private val onNewScreenshot: (ScreenshotInfo) -> Unit
     ) : ContentObserver(handler) {
 
-        private var lastDetectedUri: Uri? = null
+        private var pendingObserverJob: kotlinx.coroutines.Job? = null
+        private var lastNotifiedUri: Uri? = null
 
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
-            // Query latest screenshot (within last 20s) // maxAgeSeconds = 20
-            scope.launch {
-                val info = getRecentScreenshot(context, maxAgeSeconds = 20)
-                if (info != null && info.uri != lastDetectedUri) {
-                    lastDetectedUri = info.uri
-                    withContext(Dispatchers.Main) {
-                        onNewScreenshot(info)
+            // Cancel previous in-flight debounce job so newest event is always processed
+            pendingObserverJob?.cancel()
+            pendingObserverJob = scope.launch {
+                delay(200)
+                try {
+                    val info = getRecentScreenshot(context, maxAgeSeconds = 20, forceRefresh = true)
+                    if (info != null && info.uri != lastNotifiedUri) {
+                        lastNotifiedUri = info.uri
+                        withContext(Dispatchers.Main) {
+                            onNewScreenshot(info)
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.w(TAG, "ScreenshotObserver prefetch error: ${e.message}")
                 }
             }
         }
 
         fun cleanup() {
             try {
+                pendingObserverJob?.cancel()
                 scope.cancel()
             } catch (_: Exception) {}
         }
     }
 }
+

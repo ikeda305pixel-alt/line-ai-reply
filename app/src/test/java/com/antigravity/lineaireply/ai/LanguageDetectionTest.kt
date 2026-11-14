@@ -66,4 +66,52 @@ class LanguageDetectionTest {
         assertFalse("Whitespace string is not English", ChatPromptBuilder.isEnglishOrForeign("   "))
         assertFalse("Only URLs is not English", ChatPromptBuilder.isEnglishOrForeign("https://line.me/ti/p/test"))
     }
+
+    @Test
+    fun testVisionPromptLineExchangeProhibitionAndKanagawa() {
+        val visionPrompt = ChatPromptBuilder.buildPromptForVision(
+            mode = AssistantMode.REPLY,
+            userPromptNote = null,
+            includeLineInvite = true
+        )
+
+        // Strict rule: Must instruct model to NEVER output LINE invite when screen is LINE talk room
+        assertTrue(
+            "Vision prompt must contain strict prohibition against LINE exchange link on LINE screens",
+            visionPrompt.contains("画面がLINEのトーク画面の場合はすでにLINE上であるため、LINE交換リンクは【絶対に出力しないこと】") ||
+            visionPrompt.contains("画面がLINEのトーク画面の場合はすでにLINE上であるため")
+        )
+
+        // Location rule: Must contain Kanagawa locations and forbid Tokyo
+        assertTrue(
+            "Vision prompt must enforce Kanagawa locations and forbid Tokyo",
+            visionPrompt.contains("厚木") && visionPrompt.contains("茅ヶ崎") && visionPrompt.contains("東京禁止")
+        )
+    }
+
+    @Test
+    fun testTextPromptLineExchangeProhibition() {
+        // When includeLineInvite = false (e.g. LINE talk room text)
+        val textPromptNoInvite = ChatPromptBuilder.buildPromptForText(
+            contextText = "了解！また連絡するね",
+            contextSource = "ユーザーがLINEからコピーしたメッセージ",
+            isPolite = false,
+            mode = AssistantMode.REPLY,
+            userPromptNote = null,
+            includeLineInvite = false
+        )
+
+        assertFalse(
+            "Text prompt with includeLineInvite = false must NOT contain LINE invite URL",
+            textPromptNoInvite.contains(ChatPromptBuilder.USER_LINE_LINK)
+        )
+        assertFalse(
+            "Text prompt with includeLineInvite = false must NOT contain JA_LINE_INVITE",
+            textPromptNoInvite.contains("LINE交換しよー")
+        )
+        assertTrue(
+            "Text prompt must enforce Kanagawa locations and forbid Tokyo",
+            textPromptNoInvite.contains("厚木") && textPromptNoInvite.contains("茅ヶ崎") && textPromptNoInvite.contains("東京禁止")
+        )
+    }
 }

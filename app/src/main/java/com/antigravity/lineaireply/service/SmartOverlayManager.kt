@@ -335,17 +335,17 @@ class SmartOverlayManager(private val context: Context) {
     // ==========================================
     // 3. Window Focus Trick for Clipboard Reading
     // ==========================================
-    fun readClipboardWithFocusTrick(targetView: View?, onResult: (String?) -> Unit) {
+    fun readClipboardWithFocusTrick(targetView: View?, onResult: (String?) -> Unit): () -> Unit {
         val v = targetView ?: bubbleView ?: bottomBarView ?: cardView
         if (v == null || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && !v.isAttachedToWindow)) {
             onResult(readClipboardDirect())
-            return
+            return {}
         }
 
         val params = v.layoutParams as? WindowManager.LayoutParams
         if (params == null) {
             onResult(readClipboardDirect())
-            return
+            return {}
         }
 
         val originalFlags = params.flags
@@ -362,12 +362,11 @@ class SmartOverlayManager(private val context: Context) {
         }
 
         var focusListener: android.view.ViewTreeObserver.OnWindowFocusChangeListener? = null
+        var attachListener: View.OnAttachStateChangeListener? = null
+        var fallbackRunnable: Runnable? = null
         var handled = false
-        fun retrieveAndRestore() {
-            if (handled) return
-            handled = true
 
-            // Guaranteed unregistration of focus listener to prevent leaks
+        fun restoreState() {
             focusListener?.let {
                 try {
                     v.viewTreeObserver?.removeOnWindowFocusChangeListener(it)
@@ -375,49 +374,75 @@ class SmartOverlayManager(private val context: Context) {
                     Log.w(TAG, "Failed removing focus listener: ${e.message}")
                 }
             }
+            focusListener = null
 
-            val clipText = readClipboardDirect()
+            attachListener?.let {
+                v.removeOnAttachStateChangeListener(it)
+            }
+            attachListener = null
+
+            fallbackRunnable?.let {
+                v.removeCallbacks(it)
+            }
+            fallbackRunnable = null
 
             // Restore original flags
             params.flags = originalFlags
             safeUpdateViewLayout(v, params)
+        }
 
+        fun retrieveAndRestore() {
+            if (handled) return
+            handled = true
+
+            restoreState()
+            val clipText = readClipboardDirect()
             onResult(clipText)
         }
 
-        val attachListener = object : View.OnAttachStateChangeListener {
+        attachListener = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {}
             override fun onViewDetachedFromWindow(view: View) {
-                view.removeOnAttachStateChangeListener(this)
                 retrieveAndRestore()
             }
         }
         v.addOnAttachStateChangeListener(attachListener)
 
-        // Detect window focus change or fallback after 100ms
+        // Detect window focus change or fallback after 80ms
         focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
             if (hasFocus) {
-                v.removeOnAttachStateChangeListener(attachListener)
                 retrieveAndRestore()
             }
         }
         v.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
 
-        v.postDelayed({
-            v.removeOnAttachStateChangeListener(attachListener)
+        val runnable = Runnable {
             retrieveAndRestore()
-        }, 100)
+        }
+        fallbackRunnable = runnable
+        v.postDelayed(runnable, 80)
+
+        return {
+            if (!handled) {
+                handled = true
+                restoreState()
+            }
+        }
     }
 
     /**
      * Coroutine-friendly suspend version of readClipboardWithFocusTrick.
+     * Guaranteed cancellation safety: unregisters listeners and restores flags if cancelled.
      */
     suspend fun readClipboardWithFocusTrickSuspend(targetView: View? = null): String? =
         kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-            readClipboardWithFocusTrick(targetView) { result ->
+            val cleanup = readClipboardWithFocusTrick(targetView) { result ->
                 if (continuation.isActive) {
                     continuation.resumeWith(Result.success(result))
                 }
+            }
+            continuation.invokeOnCancellation {
+                cleanup()
             }
         }
 
@@ -560,7 +585,11 @@ class SmartOverlayManager(private val context: Context) {
             tvClipboard?.visibility = View.GONE
         }
 
-        // 6. Mini Input Box
+        val isLoading = options.isEmpty() && alertMessage.isNullOrBlank() && (
+            summaryText.contains("解析中") || summaryText.contains("生成中") || summaryText.contains("確認中")
+        )
+
+        // 6. Mini Input Box (hide during active loading)
         val layoutMini = v.findViewById<LinearLayout>(R.id.layoutMiniInput)
         val editMini = v.findViewById<EditText>(R.id.editMiniPrompt)
         val btnMini = v.findViewById<Button>(R.id.btnMiniGenerate)
@@ -574,10 +603,10 @@ class SmartOverlayManager(private val context: Context) {
             }
         }
 
-        val showMiniInput = options.isEmpty() && alertMessage.isNullOrBlank()
+        val showMiniInput = options.isEmpty() && alertMessage.isNullOrBlank() && !isLoading
         layoutMini?.visibility = if (showMiniInput) View.VISIBLE else View.GONE
 
-        // 7. 4 Reply Options Buttons
+        // 7. 4 Reply Options Buttons (instantly hidden during loading to prevent stale UI flicker)
         val btnOpts = listOf(
             v.findViewById<Button>(R.id.btnOpt1),
             v.findViewById<Button>(R.id.btnOpt2),
@@ -586,8 +615,8 @@ class SmartOverlayManager(private val context: Context) {
         )
 
         for (i in btnOpts.indices) {
-            val btn = btnOpts[i]
-            if (i < options.size) {
+            val btn = btnOpts[i] ?: continue
+            if (!isLoading && i < options.size) {
                 val opt = options[i]
                 btn.visibility = View.VISIBLE
                 btn.text = "${opt.label}: ${opt.text}"

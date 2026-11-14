@@ -213,6 +213,8 @@ class MainActivity : AppCompatActivity() {
                 btnTestApiKey.isEnabled = true
                 btnTestApiKey.text = "🔑 APIキーの通信テスト"
 
+                if (isFinishing || isDestroyed) return@launch
+
                 if (success) {
                     updateUIState()
                     AlertDialog.Builder(this@MainActivity)
@@ -335,16 +337,20 @@ class MainActivity : AppCompatActivity() {
                     val reader = BufferedReader(InputStreamReader(stream))
                     val text = reader.readText()
                     val (success, message) = memoryManager.importAndLearnLog(text, key)
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle(if (success) "🧠 過去ログ学習完了！" else "⚠️ 学習失敗")
-                        .setMessage(message)
-                        .setPositiveButton("OK") { _, _ ->
-                            updateUIState()
-                        }
-                        .show()
+                    if (!isFinishing && !isDestroyed) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle(if (success) "🧠 過去ログ学習完了！" else "⚠️ 学習失敗")
+                            .setMessage(message)
+                            .setPositiveButton("OK") { _, _ ->
+                                updateUIState()
+                            }
+                            .show()
+                    }
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "ファイル読み込み失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@MainActivity, "ファイル読み込み失敗: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -369,13 +375,15 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     Toast.makeText(this@MainActivity, "AIが口調と相手の性格を学習中...", Toast.LENGTH_SHORT).show()
                     val (success, message) = memoryManager.importAndLearnLog(pasted, key)
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle(if (success) "🧠 学習完了！" else "⚠️ 学習失敗")
-                        .setMessage(message)
-                        .setPositiveButton("OK") { _, _ ->
-                            updateUIState()
-                        }
-                        .show()
+                    if (!isFinishing && !isDestroyed) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle(if (success) "🧠 学習完了！" else "⚠️ 学習失敗")
+                            .setMessage(message)
+                            .setPositiveButton("OK") { _, _ ->
+                                updateUIState()
+                            }
+                            .show()
+                    }
                 }
             }
             .setNegativeButton("キャンセル", null)

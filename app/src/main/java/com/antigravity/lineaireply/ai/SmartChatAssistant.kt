@@ -1,5 +1,6 @@
 package com.antigravity.lineaireply.ai
 
+import android.content.SharedPreferences
 import android.util.Log
 import com.antigravity.lineaireply.plugin.DynamicModelRouterPlugin
 import com.antigravity.lineaireply.plugin.IDynamicModelRouterPlugin
@@ -7,6 +8,7 @@ import com.antigravity.lineaireply.plugin.IPersonaSynthesizerPlugin
 import com.antigravity.lineaireply.plugin.PersonaSynthesizerPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import org.json.JSONObject
 
 data class SmartReplyOption(
@@ -36,8 +38,49 @@ class SmartChatAssistant(
     private val guard: FreeTierGuard,
     private val memoryManager: ConversationMemoryManager? = null,
     private val router: IDynamicModelRouterPlugin = DynamicModelRouterPlugin(),
-    private val synthesizer: IPersonaSynthesizerPlugin = PersonaSynthesizerPlugin()
+    private val synthesizer: IPersonaSynthesizerPlugin = PersonaSynthesizerPlugin(),
+    private val prefs: SharedPreferences? = null
 ) {
+
+    init {
+        prefs?.getString("cached_working_model", null)?.let { saved ->
+            if (saved.isNotBlank() && DynamicModelRouterPlugin.CANDIDATE_MODELS.contains(saved)) {
+                cachedWorkingModel = saved
+            } else {
+                // Eliminate zombie deprecated models (e.g. gemini-2.0-flash, gemini-1.5-flash)
+                prefs.edit().remove("cached_working_model").apply()
+                if (cachedWorkingModel == saved) {
+                    cachedWorkingModel = null
+                }
+            }
+        }
+    }
+
+    private fun saveCachedWorkingModel(model: String) {
+        if (DynamicModelRouterPlugin.CANDIDATE_MODELS.contains(model)) {
+            cachedWorkingModel = model
+            prefs?.edit()?.putString("cached_working_model", model)?.apply()
+        } else {
+            removeCachedWorkingModel()
+        }
+    }
+
+    private fun removeCachedWorkingModel() {
+        cachedWorkingModel = null
+        prefs?.edit()?.remove("cached_working_model")?.apply()
+    }
+
+    suspend fun warmupConnection() = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("https://generativelanguage.googleapis.com")
+                .head()
+                .build()
+            DynamicModelRouterPlugin.sharedClient.newCall(req).execute().use { }
+        } catch (_: Exception) {
+            // Safe pre-warm, ignore exceptions
+        }
+    }
 
     companion object {
         private const val TAG = "SmartChatAssistant"
@@ -64,15 +107,7 @@ class SmartChatAssistant(
                 return Pair(false, "Gemini APIキーを入力してください。\n（AIza... または Google AI Studio 最新形式の AQ....）")
             }
             val router = DynamicModelRouterPlugin()
-            val result = router.generateContent(
-                apiKey = cleanKey,
-                prompt = "返信テストです。[{\"label\":\"テスト\",\"text\":\"OK\"}]の形式で返してください。"
-            )
-            return if (result.success) {
-                Pair(true, "Gemini API との通信に成功しました！\nモデル: ${result.modelName}")
-            } else {
-                Pair(false, "通信エラー: ${result.errorMessage ?: "APIキーが無効か、通信環境をご確認ください。"}")
-            }
+            return router.testApiKey(cleanKey)
         }
     }
 
@@ -126,22 +161,24 @@ class SmartChatAssistant(
             includeLineInvite = true
         )
 
+        val callStart = System.currentTimeMillis()
         val modelResult = router.generateContent(
             apiKey = currentKey,
             prompt = prompt,
             preferredModel = cachedWorkingModel,
             imageBase64 = imageBase64
         )
+        val latencyMs = System.currentTimeMillis() - callStart
 
         if (modelResult.success && modelResult.responseText.isNotBlank()) {
             val options = synthesizer.parseReplies(modelResult.responseText)
             val recognizedTarget = extractTargetMessage(modelResult.responseText)
             if (options.isNotEmpty()) {
                 guard.recordRequest()
-                cachedWorkingModel = modelResult.modelName
+                saveCachedWorkingModel(modelResult.modelName)
                 return@withContext GenerationResult(
                     options = options.take(4),
-                    engine = "Gemini Vision (${modelResult.modelName})",
+                    engine = "Gemini Vision (${modelResult.modelName} · ${latencyMs}ms)",
                     errorDetails = null,
                     targetMessage = recognizedTarget
                 )
@@ -193,6 +230,10 @@ class SmartChatAssistant(
             )
         }
 
+        val isMatchingApp = clipboardText.contains("Bumble", ignoreCase = true) ||
+                clipboardText.contains("マッチしました") ||
+                clipboardText.contains("matched with", ignoreCase = true)
+
         val prompt = ChatPromptBuilder.buildPromptForText(
             contextText = clipboardText,
             contextSource = "ユーザーがLINEからコピーしたメッセージ",
@@ -201,26 +242,32 @@ class SmartChatAssistant(
             userPromptNote = userPromptNote,
             userStyle = userStyle,
             partnerDossier = partnerDossier,
-            includeLineInvite = true
+            includeLineInvite = isMatchingApp
         )
 
+        val callStart = System.currentTimeMillis()
         val modelResult = router.generateContent(
             apiKey = currentKey,
             prompt = prompt,
             preferredModel = cachedWorkingModel
         )
+        val latencyMs = System.currentTimeMillis() - callStart
 
         if (modelResult.success && modelResult.responseText.isNotBlank()) {
             val options = synthesizer.parseReplies(modelResult.responseText)
             if (options.isNotEmpty()) {
                 guard.recordRequest()
-                cachedWorkingModel = modelResult.modelName
+                saveCachedWorkingModel(modelResult.modelName)
                 return@withContext GenerationResult(
                     options = options.take(4),
-                    engine = "Gemini (${modelResult.modelName})",
+                    engine = "Gemini (${modelResult.modelName} · ${latencyMs}ms)",
                     errorDetails = null
                 )
             }
+        }
+
+        if (!modelResult.success && cachedWorkingModel != null && !modelResult.errorMessage.isNullOrBlank() && modelResult.errorMessage.contains("404")) {
+            removeCachedWorkingModel()
         }
 
         val fallbackOptions = getFallbackOptions(isPolite = isPolite, mode = mode, isEnglish = isEnglish)
@@ -262,6 +309,10 @@ class SmartChatAssistant(
             )
         }
 
+        val isMatchingApp = userPromptNote.contains("Bumble", ignoreCase = true) ||
+                userPromptNote.contains("マッチング", ignoreCase = true) ||
+                userPromptNote.contains("Tinder", ignoreCase = true)
+
         val prompt = ChatPromptBuilder.buildPromptForText(
             contextText = userPromptNote,
             contextSource = "ユーザーが直接入力したトピック・要件メモ",
@@ -270,26 +321,32 @@ class SmartChatAssistant(
             userPromptNote = null,
             userStyle = userStyle,
             partnerDossier = partnerDossier,
-            includeLineInvite = true
+            includeLineInvite = isMatchingApp
         )
 
+        val callStart = System.currentTimeMillis()
         val modelResult = router.generateContent(
             apiKey = currentKey,
             prompt = prompt,
             preferredModel = cachedWorkingModel
         )
+        val latencyMs = System.currentTimeMillis() - callStart
 
         if (modelResult.success && modelResult.responseText.isNotBlank()) {
             val options = synthesizer.parseReplies(modelResult.responseText)
             if (options.isNotEmpty()) {
                 guard.recordRequest()
-                cachedWorkingModel = modelResult.modelName
+                saveCachedWorkingModel(modelResult.modelName)
                 return@withContext GenerationResult(
                     options = options.take(4),
-                    engine = "Gemini (${modelResult.modelName})",
+                    engine = "Gemini (${modelResult.modelName} · ${latencyMs}ms)",
                     errorDetails = null
                 )
             }
+        }
+
+        if (!modelResult.success && cachedWorkingModel != null && !modelResult.errorMessage.isNullOrBlank() && modelResult.errorMessage.contains("404")) {
+            removeCachedWorkingModel()
         }
 
         val fallbackOptions = getFallbackOptions(isPolite = isPolite, mode = mode, isEnglish = isEnglish)

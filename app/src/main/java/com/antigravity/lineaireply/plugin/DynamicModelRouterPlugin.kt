@@ -25,18 +25,25 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         const val TAG = "DynamicModelRouter"
 
         val CANDIDATE_MODELS = listOf(
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-2.5-flash",
-            "gemini-flash-latest",
+            "gemini-3.5-flash-lite",
             "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite"
+            "gemini-2.5-flash-lite",
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+            "gemini-2.5-flash"
         )
 
         @Volatile
         var cachedWorkingModel: String? = null
+
+        val sharedClient: OkHttpClient = OkHttpClient.Builder()
+            .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
 
         fun sanitizeKey(rawKey: String): String {
             return rawKey
@@ -49,13 +56,22 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                 .replace("　", "")
                 .trim()
         }
+
+        fun buildThinkingConfig(model: String): JSONObject? {
+            val lower = model.lowercase()
+            return when {
+                lower.contains("2.5-flash-lite") -> null
+                lower.contains("2.5-flash") -> JSONObject().apply { put("thinkingBudget", 0) }
+                lower.contains("3.") || lower.contains("flash-lite") || lower.contains("flash") -> {
+                    JSONObject().apply { put("thinkingLevel", "minimal") }
+                }
+                else -> null
+            }
+        }
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .build()
+    private val client: OkHttpClient
+        get() = sharedClient
 
     private val mediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -93,16 +109,22 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
                         }
                     }
 
-                    // Sort: prioritize 2.0-flash > 2.0-flash-lite > 1.5-flash > 2.5-flash > flash-latest
+                    // Sort matching 2026 prioritization
                     result.sortWith { a, b ->
                         fun score(m: String): Int = when {
-                            m == "gemini-2.0-flash" -> 120
-                            m == "gemini-2.0-flash-lite" -> 115
-                            m == "gemini-1.5-flash" -> 110
-                            m.contains("2.0-flash") -> 105
-                            m.contains("1.5-flash") -> 100
-                            m.contains("2.5-flash") -> 95
-                            m.contains("flash-latest") -> 90
+                            m == "gemini-3.5-flash-lite" -> 150
+                            m == "gemini-3.1-flash-lite" -> 145
+                            m == "gemini-2.5-flash-lite" -> 140
+                            m == "gemini-3.6-flash" -> 135
+                            m == "gemini-3.8-flash" -> 130
+                            m == "gemini-flash-lite-latest" -> 125
+                            m == "gemini-flash-latest" -> 120
+                            m == "gemini-2.5-flash" -> 115
+                            m.contains("3.5-flash-lite") -> 110
+                            m.contains("3.1-flash-lite") -> 105
+                            m.contains("2.5-flash-lite") -> 100
+                            m.contains("3.") -> 95
+                            m.contains("2.5") -> 90
                             m.contains("flash") -> 80
                             m.contains("pro") -> 40
                             else -> 10
@@ -142,82 +164,119 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
 
         var lastError = ""
 
+        fun buildRequestBody(model: String, includeThinking: Boolean): JSONObject {
+            return JSONObject().apply {
+                val parts = JSONArray().apply {
+                    if (!imageBase64.isNullOrBlank()) {
+                        put(JSONObject().apply {
+                            put("inline_data", JSONObject().apply {
+                                put("mime_type", "image/jpeg")
+                                put("data", imageBase64)
+                            })
+                        })
+                    }
+                    put(JSONObject().put("text", prompt))
+                }
+                put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+                put("generationConfig", JSONObject().apply {
+                    put("responseMimeType", "application/json")
+                    put("maxOutputTokens", 1280)
+                    put("temperature", 0.7)
+                    if (includeThinking) {
+                        val thinkingObj = buildThinkingConfig(model)
+                        if (thinkingObj != null) {
+                            put("thinkingConfig", thinkingObj)
+                        }
+                    }
+                })
+            }
+        }
+
         for (rawModel in modelsToTry) {
             val model = rawModel.removePrefix("models/")
-            try {
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
-                val body = JSONObject().apply {
-                    val parts = JSONArray().apply {
-                        if (!imageBase64.isNullOrBlank()) {
-                            put(JSONObject().apply {
-                                put("inline_data", JSONObject().apply {
-                                    put("mime_type", "image/jpeg")
-                                    put("data", imageBase64)
-                                })
-                            })
+            var attempts = 0
+            var useThinking = true
+            var isCircuitBreak = false
+
+            while (attempts < 2) {
+                attempts++
+                try {
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
+                    val body = buildRequestBody(model, includeThinking = useThinking)
+
+                    val req = Request.Builder()
+                        .url(endpoint)
+                        .addHeader("x-goog-api-key", cleanKey)
+                        .post(body.toString().toRequestBody(mediaType))
+                        .build()
+
+                    val (isSuccess, code, respStr) = client.newCall(req).execute().use { resp ->
+                        Triple(resp.isSuccessful, resp.code, resp.body?.string() ?: "")
+                    }
+
+                    if (!isSuccess) {
+                        // Check if 400 was caused by thinkingConfig rejection rather than invalid API key
+                        if (code == 400 && useThinking && attempts == 1) {
+                            val lowerErr = respStr.lowercase()
+                            val isThinkingError = lowerErr.contains("thinking") ||
+                                    lowerErr.contains("unknown field") ||
+                                    lowerErr.contains("invalid value") ||
+                                    lowerErr.contains("generation_config") ||
+                                    !lowerErr.contains("api_key")
+                            if (isThinkingError) {
+                                Log.w(TAG, "Model $model rejected thinkingConfig ($respStr). Retrying without thinkingConfig...")
+                                useThinking = false
+                                continue // Retry same model without thinkingConfig
+                            }
                         }
-                        put(JSONObject().put("text", prompt))
-                    }
-                    put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-                    put("generationConfig", JSONObject().apply {
-                        put("responseMimeType", "application/json")
-                        put("maxOutputTokens", 500)
-                    })
-                }
 
-                val req = Request.Builder()
-                    .url(endpoint)
-                    .addHeader("x-goog-api-key", cleanKey)
-                    .post(body.toString().toRequestBody(mediaType))
-                    .build()
-
-                val (isSuccess, code, respStr) = client.newCall(req).execute().use { resp ->
-                    Triple(resp.isSuccessful, resp.code, resp.body?.string() ?: "")
-                }
-
-                if (!isSuccess) {
-                    val friendlyMsg = when (code) {
-                        400 -> "HTTP 400 (無効なAPIキー): キー形式を確認してください"
-                        403 -> "HTTP 403 (権限エラー): Google CloudでGenerative Language APIが有効か確認してください"
-                        404 -> "HTTP 404 (モデル $model は非提供)"
-                        429 -> "HTTP 429 (モデル $model の個別枠上限)"
-                        else -> "HTTP $code: $respStr"
+                        val friendlyMsg = when (code) {
+                            400 -> "HTTP 400 (無効なリクエスト/APIキー): キー形式を確認してください"
+                            403 -> "HTTP 403 (権限エラー): Google CloudでGenerative Language APIが有効か確認してください"
+                            404 -> "HTTP 404 (モデル $model は非提供)"
+                            429 -> "HTTP 429 (モデル $model の個別枠上限)"
+                            else -> "HTTP $code: $respStr"
+                        }
+                        lastError = friendlyMsg
+                        if (cachedWorkingModel == model) {
+                            cachedWorkingModel = null
+                        }
+                        Log.w(TAG, "Model $model returned error: $lastError")
+                        if (code == 400 || code == 403) {
+                            isCircuitBreak = true
+                        }
+                        break // Break while loop to move to next model or circuit break
                     }
-                    lastError = friendlyMsg
-                    if (cachedWorkingModel == model) {
-                        cachedWorkingModel = null
-                    }
-                    Log.w(TAG, "Model $model returned error: $lastError")
-                    // Circuit breaker: Non-retryable key or auth errors should fail immediately rather than looping through all models
-                    if (code == 400 || code == 403) {
+
+                    val root = JSONObject(respStr)
+                    val candidates = root.optJSONArray("candidates")
+                    if (candidates == null || candidates.length() == 0) {
+                        val feedback = root.optJSONObject("promptFeedback")
+                        lastError = "生成結果が空です (ブロック理由: ${feedback?.optString("blockReason", "不明")})"
                         break
                     }
-                    continue
-                }
 
-                val root = JSONObject(respStr)
-                val candidates = root.optJSONArray("candidates")
-                if (candidates == null || candidates.length() == 0) {
-                    val feedback = root.optJSONObject("promptFeedback")
-                    lastError = "生成結果が空です (ブロック理由: ${feedback?.optString("blockReason", "不明")})"
-                    continue
-                }
+                    val candidateObj = candidates.getJSONObject(0)
+                    val contentObj = candidateObj.optJSONObject("content")
+                    val partsArray = contentObj?.optJSONArray("parts")
+                    if (partsArray == null || partsArray.length() == 0) {
+                        val finishReason = candidateObj.optString("finishReason", "不明")
+                        lastError = "返信本文が空です (finishReason: $finishReason)"
+                        break
+                    }
 
-                val candidateObj = candidates.getJSONObject(0)
-                val contentObj = candidateObj.optJSONObject("content")
-                val partsArray = contentObj?.optJSONArray("parts")
-                if (partsArray == null || partsArray.length() == 0) {
-                    val finishReason = candidateObj.optString("finishReason", "不明")
-                    lastError = "返信本文が空です (finishReason: $finishReason)"
-                    continue
+                    val outputText = partsArray.getJSONObject(0).optString("text", "")
+                    cachedWorkingModel = model
+                    return@withContext ModelResult(true, outputText, model, null)
+                } catch (e: Exception) {
+                    lastError = "通信例外 ($model): ${e.message}"
+                    Log.w(TAG, "Request failed for $model: ${e.message}")
+                    break
                 }
+            }
 
-                val outputText = partsArray.getJSONObject(0).optString("text", "")
-                cachedWorkingModel = model
-                return@withContext ModelResult(true, outputText, model, null)
-            } catch (e: Exception) {
-                lastError = "通信例外 ($model): ${e.message}"
-                Log.w(TAG, "Request failed for $model: ${e.message}")
+            if (isCircuitBreak) {
+                break
             }
         }
 
@@ -243,45 +302,80 @@ class DynamicModelRouterPlugin : IDynamicModelRouterPlugin {
         var lastError = ""
         for (rawModel in modelsToTry) {
             val model = rawModel.removePrefix("models/")
-            try {
-                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
-                val body = JSONObject().apply {
-                    val parts = JSONArray().put(JSONObject().put("text", "Say OK"))
-                    put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-                }
-                val req = Request.Builder()
-                    .url(endpoint)
-                    .post(body.toString().toRequestBody(mediaType))
-                    .build()
+            var attempts = 0
+            var useThinking = true
+            var isCircuitBreak = false
 
-                val callStart = System.currentTimeMillis()
-                val (isSuccess, code, respBody, callLatency) = client.newCall(req).execute().use { resp ->
-                    val latency = System.currentTimeMillis() - callStart
-                    Tuple4(resp.isSuccessful, resp.code, resp.body?.string() ?: "", latency)
-                }
-
-                if (isSuccess) {
-                    cachedWorkingModel = model
-                    return@withContext Pair(
-                        true,
-                        "✅ Gemini API通信成功！(HTTP $code / ${callLatency}ms)\n\n【利用モデル】$model\n\n最新モデルとの超高速接続が確認できました。LINEおよびBumbleで高精度なAI返信が利用可能です。"
-                    )
-                } else {
-                    val friendlyMsg = when (code) {
-                        400 -> "HTTP 400 (無効なAPIキー)\n・APIキーが間違っているか、末尾が欠けている可能性があります。"
-                        403 -> "HTTP 403 (権限・地域エラー)\n・Google CloudのGenerative Language APIが有効化されているかご確認ください。"
-                        404 -> "HTTP 404 (モデル $model 未検出)"
-                        429 -> "HTTP 429 (利用枠上限・レート制限)\n・Gemini APIの無料枠制限に達しました。1分ほど置いて再試行してください。"
-                        else -> "HTTP $code エラー: $respBody"
+            while (attempts < 2) {
+                attempts++
+                try {
+                    val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$cleanKey"
+                    val body = JSONObject().apply {
+                        val parts = JSONArray().put(JSONObject().put("text", "Say OK"))
+                        put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+                        put("generationConfig", JSONObject().apply {
+                            put("maxOutputTokens", 50)
+                            put("temperature", 0.7)
+                            if (useThinking) {
+                                val thinkingObj = buildThinkingConfig(model)
+                                if (thinkingObj != null) {
+                                    put("thinkingConfig", thinkingObj)
+                                }
+                            }
+                        })
                     }
-                    lastError = friendlyMsg
-                    // Circuit breaker: Non-retryable key or auth errors should fail immediately rather than looping through all models
-                    if (code == 400 || code == 403) {
+                    val req = Request.Builder()
+                        .url(endpoint)
+                        .post(body.toString().toRequestBody(mediaType))
+                        .build()
+
+                    val callStart = System.currentTimeMillis()
+                    val (isSuccess, code, respBody, callLatency) = client.newCall(req).execute().use { resp ->
+                        val latency = System.currentTimeMillis() - callStart
+                        Tuple4(resp.isSuccessful, resp.code, resp.body?.string() ?: "", latency)
+                    }
+
+                    if (isSuccess) {
+                        cachedWorkingModel = model
+                        return@withContext Pair(
+                            true,
+                            "✅ Gemini API通信成功！(HTTP $code / ${callLatency}ms)\n\n【利用モデル】$model\n\n最新モデルとの超高速接続が確認できました。LINEおよびBumbleで高精度なAI返信が利用可能です。"
+                        )
+                    } else {
+                        if (code == 400 && useThinking && attempts == 1) {
+                            val lowerErr = respBody.lowercase()
+                            val isThinkingError = lowerErr.contains("thinking") ||
+                                    lowerErr.contains("unknown field") ||
+                                    lowerErr.contains("invalid value") ||
+                                    lowerErr.contains("generation_config") ||
+                                    !lowerErr.contains("api_key")
+                            if (isThinkingError) {
+                                useThinking = false
+                                continue
+                            }
+                        }
+
+                        val friendlyMsg = when (code) {
+                            400 -> "HTTP 400 (無効なAPIキー)\n・APIキーが間違っているか、末尾が欠けている可能性があります。"
+                            403 -> "HTTP 403 (権限・地域エラー)\n・Google CloudのGenerative Language APIが有効化されているかご確認ください。"
+                            404 -> "HTTP 404 (モデル $model 未検出)"
+                            429 -> "HTTP 429 (利用枠上限・レート制限)\n・Gemini APIの無料枠制限に達しました。1分ほど置いて再試行してください。"
+                            else -> "HTTP $code エラー: $respBody"
+                        }
+                        lastError = friendlyMsg
+                        if (code == 400 || code == 403) {
+                            isCircuitBreak = true
+                        }
                         break
                     }
+                } catch (e: Exception) {
+                    lastError = "通信例外 ($model): ${e.message}"
+                    break
                 }
-            } catch (e: Exception) {
-                lastError = "通信例外 ($model): ${e.message}"
+            }
+
+            if (isCircuitBreak) {
+                break
             }
         }
         Pair(false, lastError)

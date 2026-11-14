@@ -37,6 +37,12 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
     // Memory cache to avoid repeated disk reads during rapid accessibility events
     private val memoryCache = ConcurrentHashMap<String, List<MessageTurn>>()
 
+    @Volatile
+    private var cachedUserStyle: UserStyleProfile? = null
+
+    private val partnerDossierCache = ConcurrentHashMap<String, PartnerDossier>()
+    private val memoryLock = Any()
+
     companion object {
         const val TAG = "ConvMemoryPlugin"
         const val MAX_ACCUMULATED_TURNS = 300
@@ -57,10 +63,13 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
         val key = normalizePartnerKey(partnerName)
         memoryCache[key]?.let { return it }
 
-        val rawJson = chatPrefs.getString(key, "[]") ?: "[]"
-        val turns = parseTurnsFromJson(rawJson)
-        memoryCache[key] = turns
-        return turns
+        synchronized(memoryLock) {
+            memoryCache[key]?.let { return it }
+            val rawJson = chatPrefs.getString(key, "[]") ?: "[]"
+            val turns = parseTurnsFromJson(rawJson)
+            memoryCache[key] = turns
+            return turns
+        }
     }
 
     override fun getAccumulatedTurnCount(partnerName: String): Int {
@@ -71,114 +80,141 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
         if (turns.isEmpty()) return getAccumulatedTurnCount(partnerName)
 
         val key = normalizePartnerKey(partnerName)
-        val existing = getAccumulatedConversation(key)
 
         // Filter valid text
         val validIncoming = turns.filter {
             it.text.isNotBlank() && it.text.trim().length in 2..500
         }
-        if (validIncoming.isEmpty()) return existing.size
+        if (validIncoming.isEmpty()) return getAccumulatedTurnCount(key)
 
-        // 1. Chronologically merge and deduplicate
-        val merged = mergeChronological(existing, validIncoming)
-        memoryCache[key] = merged
+        synchronized(memoryLock) {
+            val existing = getAccumulatedConversation(key)
 
-        // Persist to SharedPreferences
-        val jsonArray = serializeTurnsToJson(merged)
-        chatPrefs.edit().putString(key, jsonArray.toString()).apply()
+            // 1. Chronologically merge and deduplicate
+            val merged = mergeChronological(existing, validIncoming)
+            memoryCache[key] = merged
 
-        // 2. Profile "自分がどういう回答をするのか" (User Answer Style Profiling)
-        val allUserTurns = merged.filter { !it.isPartner }.map { it.text.trim() }
-        if (allUserTurns.isNotEmpty()) {
-            val currentSamples = getUserStyle().sampleQuotes.toMutableList()
-            var added = false
-            for (m in allUserTurns) {
-                if (!currentSamples.contains(m)) {
-                    currentSamples.add(0, m)
-                    added = true
+            // Persist to SharedPreferences
+            val jsonArray = serializeTurnsToJson(merged)
+            chatPrefs.edit().putString(key, jsonArray.toString()).apply()
+
+            // 2. Profile "自分がどういう回答をするのか" (User Answer Style Profiling)
+            val allUserTurns = merged.filter { !it.isPartner }.map { it.text.trim() }
+            if (allUserTurns.isNotEmpty()) {
+                val currentSamples = getUserStyle().sampleQuotes.toMutableList()
+                var added = false
+                for (m in allUserTurns) {
+                    if (!currentSamples.contains(m)) {
+                        currentSamples.add(0, m)
+                        added = true
+                    }
+                }
+                val trimmed = currentSamples.take(MAX_USER_SAMPLES)
+                val dynamicUserSummary = profileUserAnswerStyle(trimmed)
+                val newLearnedCount = metaPrefs.getInt(KEY_USER_LEARNED_COUNT, 0) + (if (added) 1 else 0)
+                metaPrefs.edit()
+                    .putString(KEY_USER_SAMPLES, trimmed.joinToString("|||"))
+                    .putString(KEY_USER_STYLE_SUMMARY, dynamicUserSummary)
+                    .putInt(KEY_USER_LEARNED_COUNT, newLearnedCount)
+                    .apply()
+                cachedUserStyle = UserStyleProfile(dynamicUserSummary, trimmed, newLearnedCount)
+            }
+
+            // 3. Profile "その人のこと" (Partner Persona, Location & Strategy Profiling)
+            val allPartnerTurns = merged.filter { it.isPartner }
+            if (allPartnerTurns.isNotEmpty() && key != "default_partner") {
+                try {
+                    val dossier = profilePartnerPersona(key, allPartnerTurns)
+                    val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
+                    val root = JSONObject(allDossiersJson)
+                    val obj = JSONObject().apply {
+                        put("location", dossier.location)
+                        put("personality", dossier.personalityType)
+                        put("strategy", dossier.strategy)
+                        put("count", dossier.accumulatedMessageCount)
+                    }
+                    root.put(key, obj)
+                    metaPrefs.edit().putString(KEY_PARTNER_DOSSIERS, root.toString()).apply()
+                    partnerDossierCache[key] = dossier
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error updating partner dossier: ${e.message}")
                 }
             }
-            val trimmed = currentSamples.take(MAX_USER_SAMPLES)
-            val dynamicUserSummary = profileUserAnswerStyle(trimmed)
-            metaPrefs.edit()
-                .putString(KEY_USER_SAMPLES, trimmed.joinToString("|||"))
-                .putString(KEY_USER_STYLE_SUMMARY, dynamicUserSummary)
-                .putInt(KEY_USER_LEARNED_COUNT, metaPrefs.getInt(KEY_USER_LEARNED_COUNT, 0) + (if (added) 1 else 0))
-                .apply()
-        }
 
-        // 3. Profile "その人のこと" (Partner Persona, Location & Strategy Profiling)
-        val allPartnerTurns = merged.filter { it.isPartner }
-        if (allPartnerTurns.isNotEmpty() && key != "default_partner") {
-            try {
-                val dossier = profilePartnerPersona(key, allPartnerTurns)
-                val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
-                val root = JSONObject(allDossiersJson)
-                val obj = JSONObject().apply {
-                    put("location", dossier.location)
-                    put("personality", dossier.personalityType)
-                    put("strategy", dossier.strategy)
-                    put("count", dossier.accumulatedMessageCount)
-                }
-                root.put(key, obj)
-                metaPrefs.edit().putString(KEY_PARTNER_DOSSIERS, root.toString()).apply()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error updating partner dossier: ${e.message}")
-            }
+            return merged.size
         }
-
-        return merged.size
     }
 
     override fun clearAccumulatedConversation(partnerName: String) {
         val key = normalizePartnerKey(partnerName)
-        memoryCache.remove(key)
-        chatPrefs.edit().remove(key).apply()
+        synchronized(memoryLock) {
+            memoryCache.remove(key)
+            partnerDossierCache.remove(key)
+            chatPrefs.edit().remove(key).apply()
+        }
     }
 
     override fun getUserStyle(): UserStyleProfile {
-        val summary = metaPrefs.getString(
-            KEY_USER_STYLE_SUMMARY,
-            "フランクなタメ口。短文（15〜30文字）でテンポ重視。ツッコミや軽いイジりが好きで、絵文字は控えめ（😂や笑を多用）。ストレートで回りくどい言い回しを嫌う。"
-        ) ?: ""
+        cachedUserStyle?.let { return it }
 
-        val rawSamples = metaPrefs.getString(KEY_USER_SAMPLES, "") ?: ""
-        val sampleList = if (rawSamples.isNotBlank()) {
-            rawSamples.split("|||").filter { it.isNotBlank() }
-        } else {
-            listOf("あいてるよ！なんかある？", "茅ヶ崎で海見ながらカフェ行こー☕️", "それ笑うんだけど😂", "厚木か海老名あたりで美味いもん食べよ！")
+        synchronized(memoryLock) {
+            cachedUserStyle?.let { return it }
+
+            val summary = metaPrefs.getString(
+                KEY_USER_STYLE_SUMMARY,
+                "フランクなタメ口。短文（15〜30文字）でテンポ重視。ツッコミや軽いイジりが好きで、絵文字は控えめ（😂や笑を多用）。ストレートで回りくどい言い回しを嫌う。"
+            ) ?: ""
+
+            val rawSamples = metaPrefs.getString(KEY_USER_SAMPLES, "") ?: ""
+            val sampleList = if (rawSamples.isNotBlank()) {
+                rawSamples.split("|||").filter { it.isNotBlank() }
+            } else {
+                listOf("あいてるよ！なんかある？", "茅ヶ崎で海見ながらカフェ行こー☕️", "それ笑うんだけど😂", "厚木か海老名あたりで美味いもん食べよ！")
+            }
+
+            val count = metaPrefs.getInt(KEY_USER_LEARNED_COUNT, sampleList.size)
+            val profile = UserStyleProfile(summary, sampleList, count)
+            cachedUserStyle = profile
+            return profile
         }
-
-        val count = metaPrefs.getInt(KEY_USER_LEARNED_COUNT, sampleList.size)
-        return UserStyleProfile(summary, sampleList, count)
     }
 
     override fun getPartnerDossier(partnerName: String): PartnerDossier {
         val key = normalizePartnerKey(partnerName)
-        val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
-        try {
-            val root = JSONObject(allDossiersJson)
-            if (root.has(key)) {
-                val obj = root.getJSONObject(key)
-                return PartnerDossier(
-                    name = key,
-                    location = obj.optString("location", "不明"),
-                    personalityType = obj.optString("personality", "ノリ重視・フランク"),
-                    strategy = obj.optString("strategy", "適度にイジりつつ肯定して甘やかし、テンポよく主導権を握る"),
-                    accumulatedMessageCount = obj.optInt("count", getAccumulatedTurnCount(key))
-                )
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error reading partner dossier: ${e.message}")
-        }
+        partnerDossierCache[key]?.let { return it }
 
-        return PartnerDossier(
-            name = key,
-            location = "不明",
-            personalityType = "感情表現豊か・リアクション重視",
-            strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす",
-            accumulatedMessageCount = getAccumulatedTurnCount(key)
-        )
+        synchronized(memoryLock) {
+            partnerDossierCache[key]?.let { return it }
+
+            val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
+            try {
+                val root = JSONObject(allDossiersJson)
+                if (root.has(key)) {
+                    val obj = root.getJSONObject(key)
+                    val dossier = PartnerDossier(
+                        name = key,
+                        location = obj.optString("location", "不明"),
+                        personalityType = obj.optString("personality", "ノリ重視・フランク"),
+                        strategy = obj.optString("strategy", "適度にイジりつつ肯定して甘やかし、テンポよく主導権を握る"),
+                        accumulatedMessageCount = obj.optInt("count", getAccumulatedTurnCount(key))
+                    )
+                    partnerDossierCache[key] = dossier
+                    return dossier
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading partner dossier: ${e.message}")
+            }
+
+            val fallbackDossier = PartnerDossier(
+                name = key,
+                location = "不明",
+                personalityType = "感情表現豊か・リアクション重視",
+                strategy = "相手のテンションに合わせ、共感しつつ軽くツッコミを入れて心地よく転がす",
+                accumulatedMessageCount = getAccumulatedTurnCount(key)
+            )
+            partnerDossierCache[key] = fallbackDossier
+            return fallbackDossier
+        }
     }
 
     override suspend fun importAndLearnLog(
@@ -291,10 +327,7 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                 }
                 """.trimIndent()
 
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(20, TimeUnit.SECONDS)
-                    .build()
+                val client = DynamicModelRouterPlugin.sharedClient
 
                 val cleanKey = SmartChatAssistant.sanitizeApiKey(apiKey)
                 val modelsToTry = if (SmartChatAssistant.cachedWorkingModel != null) {
@@ -328,10 +361,10 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
                                 SmartChatAssistant.cachedWorkingModel = model
                             }
                         }
-                        if (isSuccessful) break
                     } catch (e: Exception) {
                         Log.w(TAG, "Analysis model $model failed: ${e.message}")
                     }
+                    if (isSuccessful) break
                 }
 
                 if (isSuccessful && respStr.isNotBlank()) {
@@ -359,18 +392,27 @@ class ConversationMemoryPlugin(private val context: Context) : IConversationMemo
 
                     if (userStyleSummary.isNotBlank()) {
                         metaPrefs.edit().putString(KEY_USER_STYLE_SUMMARY, userStyleSummary).apply()
+                        cachedUserStyle = null
                     }
 
                     val allDossiersJson = metaPrefs.getString(KEY_PARTNER_DOSSIERS, "{}") ?: "{}"
                     val allRoot = JSONObject(allDossiersJson)
+                    val newCount = partnerClean.size + getAccumulatedTurnCount(resolvedPartnerName)
                     val dossierObj = JSONObject().apply {
                         put("location", partnerLoc)
                         put("personality", partnerPers)
                         put("strategy", partnerStrat)
-                        put("count", partnerClean.size + getAccumulatedTurnCount(resolvedPartnerName))
+                        put("count", newCount)
                     }
                     allRoot.put(resolvedPartnerName, dossierObj)
                     metaPrefs.edit().putString(KEY_PARTNER_DOSSIERS, allRoot.toString()).apply()
+                    partnerDossierCache[resolvedPartnerName] = PartnerDossier(
+                        name = resolvedPartnerName,
+                        location = partnerLoc,
+                        personalityType = partnerPers,
+                        strategy = partnerStrat,
+                        accumulatedMessageCount = newCount
+                    )
 
                     return@withContext Pair(
                         true,
